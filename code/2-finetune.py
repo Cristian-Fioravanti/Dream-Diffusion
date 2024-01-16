@@ -5,10 +5,17 @@ import utils as ut
 import torchvision.transforms as transforms
 from dataset import create_EEG_dataset
 from torch.utils.data import DataLoader
+import argparse
+import pytorch_lightning as pl
+import datetime
+import os
+from config import Config_Generative_Model, Config_MBM_EEG
+
 
 def main(config):
     # Project setup
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    device = torch.device(
+        "cuda") if torch.cuda.is_available() else torch.device("cpu")
     torch.manual_seed(config.seed)
     np.random.seed(config.seed)
 
@@ -45,7 +52,8 @@ def main(config):
         raise NotImplementedError
 
     # Load pretrained model metafile
-    pretrain_mbm_metafile = torch.load(config.pretrain_mbm_path, map_location="cpu")
+    pretrain_mbm_metafile = torch.load(
+        config.pretrain_mbm_path, map_location="cpu")
 
     # Create generative model (eLDM)
     generative_model = eLDM(
@@ -67,8 +75,6 @@ def main(config):
         generative_model.model.load_state_dict(model_meta["model_state_dict"])
         print("model resumed")
 
-    print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ prima del create_trainer")
-
     # Create trainer for finetuning the model
     trainer = create_trainer(
         config.num_epoch,
@@ -77,8 +83,6 @@ def main(config):
         config.logger,
         check_val_every_n_epoch=2,
     )
-
-    print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ prima del finetune")
 
     generative_model.finetune(
         trainer,
@@ -89,19 +93,21 @@ def main(config):
         config.output_path,
         config=config,
     )
-    print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ dopo del finetune")
 
     # Generate images
     # Generate limited train images and generate images for subjects separately
-    ut.generate_images(generative_model, eeg_latents_dataset_train, eeg_latents_dataset_test, config)
+    ut.generate_images(generative_model, eeg_latents_dataset_train,
+                       eeg_latents_dataset_test, config)
 
     return
 
+
 def get_args_parser():
-    parser = argparse.ArgumentParser('Double Conditioning LDM Finetuning', add_help=False)
+    parser = argparse.ArgumentParser(
+        'Double Conditioning LDM Finetuning', add_help=False)
     # project parameters
     parser.add_argument('--seed', type=int)
-    parser.add_argument('--root_path', type=str, default = '../dreamdiffusion/')
+    parser.add_argument('--root_path', type=str, default='../dreamdiffusion/')
     parser.add_argument('--pretrain_mbm_path', type=str)
     parser.add_argument('--checkpoint_path', type=str)
     parser.add_argument('--crop_ratio', type=float)
@@ -126,6 +132,22 @@ def get_args_parser():
     # parser.add_argument('--local_rank', type=int)
 
     return parser
+
+
+def folder_init(config, output_path):
+    # wandb.init( project='dreamdiffusion',
+    #             group="stageB_dc-ldm",
+    #             anonymous="allow",
+    #             config=config,
+    #             reinit=True)
+    create_readme(config, output_path)
+
+
+def create_readme(config, path):
+    print(config.__dict__)
+    with open(os.path.join(path, "README.md"), "w+") as f:
+        print(config.__dict__, file=f)
+
 
 def update_config(args, config):
     for attr in config.__dict__:
@@ -157,10 +179,10 @@ def create_trainer(
 
 
 if __name__ == "__main__":
-    # args = get_args_parser()
-    # args = args.parse_args()
+    args = get_args_parser()
+    args = args.parse_args()
     config = Config_Generative_Model()
-    # config = update_config(args, config)
+    config = update_config(args, config)
 
     if config.checkpoint_path is not None:
         model_meta = torch.load(config.checkpoint_path, map_location="cpu")

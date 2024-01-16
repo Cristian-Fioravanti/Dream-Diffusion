@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import numpy as np
-from timm.models.vision_transformer import Block
 import torch.nn.functional as F
 import utils as ut
 
@@ -29,6 +28,48 @@ class PatchEmbed1D(nn.Module):
         return x
 
 
+class CustomBlock(nn.Module):
+    def __init__(
+        self,
+        dim: int,
+        num_heads: int,
+        mlp_ratio: float = 4.,
+        dropout: float = 0.1,
+    ) -> None:
+        super().__init__()
+
+        # Self-attention layer
+        self.self_attn = nn.MultiheadAttention(dim, num_heads, dropout=dropout)
+
+        # Feedforward layer
+        self.feedforward = nn.Sequential(
+            nn.Linear(dim, int(dim * mlp_ratio)),
+            nn.ReLU(),
+            nn.Linear(int(dim * mlp_ratio), dim),
+            nn.Dropout(dropout),
+        )
+
+        # Layer normalization
+        self.norm1 = nn.LayerNorm(dim)
+        self.norm2 = nn.LayerNorm(dim)
+
+        # Dropout
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # Self-attention and layer normalization
+        attn_output, _ = self.self_attn(x, x, x)
+        x = x + self.dropout(attn_output)
+        x = self.norm1(x)
+
+        # Feedforward and layer normalization
+        ff_output = self.feedforward(x)
+        x = x + self.dropout(ff_output)
+        x = self.norm2(x)
+
+        return x
+
+
 class MaskedAutoEncoderEEG(nn.Module):
     def __init__(
         self,
@@ -52,7 +93,8 @@ class MaskedAutoEncoderEEG(nn.Module):
 
         # --------------------------------------------------------------------------
         # MAE encoder specifics
-        self.patch_embed = PatchEmbed1D(time_len, patch_size, in_chans, embed_dim)
+        self.patch_embed = PatchEmbed1D(
+            time_len, patch_size, in_chans, embed_dim)
 
         num_patches = int(time_len / patch_size)
 
@@ -64,12 +106,10 @@ class MaskedAutoEncoderEEG(nn.Module):
 
         self.blocks = nn.ModuleList(
             [
-                Block(
+                CustomBlock(
                     embed_dim,
-                    num_heads,
-                    mlp_ratio,
-                    qkv_bias=True,
-                    norm_layer=norm_layer,
+                    num_heads
+
                 )
                 for i in range(depth)
             ]
@@ -89,12 +129,10 @@ class MaskedAutoEncoderEEG(nn.Module):
 
         self.decoder_blocks = nn.ModuleList(
             [
-                Block(
+                CustomBlock(
                     decoder_embed_dim,
-                    decoder_num_heads,
-                    mlp_ratio,
-                    qkv_bias=True,
-                    norm_layer=norm_layer,
+                    decoder_num_heads
+
                 )
                 for i in range(decoder_depth)
             ]
@@ -245,7 +283,7 @@ class MaskedAutoEncoderEEG(nn.Module):
             weights = [1 - self.focus_rate] * L
             weights[
                 self.focus_range[0]
-                // self.patch_size : self.focus_range[1]
+                // self.patch_size: self.focus_range[1]
                 // self.patch_size
             ] = [self.focus_rate] * (
                 self.focus_range[1] // self.patch_size
@@ -267,7 +305,8 @@ class MaskedAutoEncoderEEG(nn.Module):
 
         # keep the first subset
         ids_keep = ids_shuffle[:, :len_keep]
-        x_masked = torch.gather(x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
+        x_masked = torch.gather(
+            x, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, D))
 
         # generate the binary mask: 0 is keep, 1 is remove
         mask = torch.ones([N, L], device=x.device)
@@ -308,7 +347,8 @@ class MaskedAutoEncoderEEG(nn.Module):
             x = blk(
                 x
             )  # Applica una serie di blocchi Transformer (self.blocks) all'input
-        x = self.norm(x)  # Normalizza l'output utilizzando la normalizzazione di layer
+        # Normalizza l'output utilizzando la normalizzazione di layer
+        x = self.norm(x)
 
         return x, mask, ids_restore
 
@@ -344,7 +384,8 @@ class MaskedAutoEncoderEEG(nn.Module):
         )  # Normalizza l'output utilizzando la normalizzazione di layer
         # print(x.shape)
         # predictor projection
-        x = self.decoder_pred(x)  # Proietta l'output utilizzando uno strato lineare
+        # Proietta l'output utilizzando uno strato lineare
+        x = self.decoder_pred(x)
         # print(x.shape)
 
         # remove cls token
@@ -405,7 +446,8 @@ class MaskedAutoEncoderEEG(nn.Module):
         loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
         # loss = loss.mean()
         loss = (
-            (loss * mask).sum() / mask.sum() if mask.sum() != 0 else (loss * mask).sum()
+            (loss * mask).sum() /
+            mask.sum() if mask.sum() != 0 else (loss * mask).sum()
         )  # mean loss on removed patches
         return loss
 
