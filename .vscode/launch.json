@@ -1,0 +1,21 @@
+{
+ 
+  "version": "0.2.0",
+  "configurations": [
+    
+    {
+      "name": "Python: Current File",
+      "type": "python",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "args": ["--dataset", "EEG" , "--num_epoch","1","--batch_size","2","--pretrain_mbm_path",
+      "../dreamdiffusion/pretrains/eeg_pretrain/checkpoint.pth","--num_samples","1","--ddim_steps","1" ],
+      // "variablePresentation": {
+      //   "function": "hide",
+      //   "special": "hide",
+      // },
+    }
+  ]
+}

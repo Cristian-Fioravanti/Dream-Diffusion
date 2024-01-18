@@ -4,11 +4,17 @@ import numpy as np
 import torch.nn.functional as F
 import utils as ut
 
+"""
+I parametri: time_len, patch_size, in_chans, e embed_dim 
+specificano le dimensioni del problema e del modello. In particolare, time_len rappresenta la lunghezza della sequenza temporale, patch_size specifica la dimensione delle "patch" (o segmenti) della sequenza, in_chans è il numero di canali di input, e embed_dim è la dimensione dell'embedding per ogni patch.
+num_patches rappresenta il numero di patch ottenute dividendo la lunghezza della sequenza temporale per la dimensione della patch.
+"""
+
 
 class PatchEmbed1D(nn.Module):
     def __init__(self, time_len=224, patch_size=1, in_chans=128, embed_dim=256):
         super().__init__()
-        num_patches = time_len // patch_size
+        num_patches = time_len // patch_size  # 224
         self.patch_shape = patch_size
         self.time_len = time_len
         self.patch_size = patch_size
@@ -19,12 +25,12 @@ class PatchEmbed1D(nn.Module):
         )
 
     def forward(self, x, **kwargs):
-        B, C, V = x.shape  # batch, channel, voxels
-        # assert V == self.num_voxels, \
-        #     f"Input fmri length ({V}) doesn't match model ({self.num_voxels})."
+
         x = (
-            self.proj(x).transpose(1, 2).contiguous()
+            # patch proiettate  nella dimensione dell'embedding embed_dim
+            self.proj(x).transpose(1, 2).contiguous() #from torch.Size([1, 1024, 128]) torch.Size([1, 128, 1024])
         )  # put embed_dim at the last dimension
+
         return x
 
 
@@ -58,6 +64,7 @@ class CustomBlock(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Self-attention and layer normalization
+        # ogni elemento della sequenza viene utilizzato per calcolare i pesi rispetto a tutti gli altri elementi nella stessa sequenza
         attn_output, _ = self.self_attn(x, x, x)
         x = x + self.dropout(attn_output)
         x = self.norm1(x)
@@ -82,12 +89,10 @@ class MaskedAutoEncoderEEG(nn.Module):
         decoder_embed_dim=512,
         decoder_depth=8,
         decoder_num_heads=16,
-        mlp_ratio=4.0,
         norm_layer=nn.LayerNorm,
         focus_range=None,
         focus_rate=None,
         img_recon_weight=1.0,
-        use_nature_img_loss=False,
     ):
         super().__init__()
 
@@ -99,9 +104,9 @@ class MaskedAutoEncoderEEG(nn.Module):
         num_patches = int(time_len / patch_size)
 
         self.num_patches = num_patches
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))  # torch.Size([1, 1, 1024])
         self.pos_embed = nn.Parameter(
-            torch.zeros(1, num_patches + 1, embed_dim), requires_grad=False
+            torch.zeros(1, num_patches + 1, embed_dim), requires_grad=False #torch.Size([1, 129, 1024])
         )  # fixed sin-cos embedding
 
         self.blocks = nn.ModuleList(
@@ -109,7 +114,6 @@ class MaskedAutoEncoderEEG(nn.Module):
                 CustomBlock(
                     embed_dim,
                     num_heads
-
                 )
                 for i in range(depth)
             ]
@@ -142,78 +146,30 @@ class MaskedAutoEncoderEEG(nn.Module):
         self.decoder_pred = nn.Linear(
             decoder_embed_dim, in_chans * patch_size, bias=True
         )  # encoder to decoder
-        # --------------------------------------------------------------------------
-
-        # nature image decoder specifics  #Non viene eseguito nel pre-traing
-        # if use_nature_img_loss:
-        #     self.nature_img_decoder_embed = nn.Linear(
-        #         embed_dim, decoder_embed_dim, bias=True
-        #     )
-
-        #     self.nature_img_mask_token = nn.Parameter(
-        #         torch.zeros(1, 1, decoder_embed_dim)
-        #     )
-
-        #     self.nature_img_decoder_pos_embed = nn.Parameter(
-        #         torch.zeros(1, num_patches + 1, decoder_embed_dim), requires_grad=False
-        #     )  # fixed sin-cos embedding
-
-        #     self.nature_img_decoder_blocks = nn.ModuleList(
-        #         [
-        #             Block(
-        #                 decoder_embed_dim,
-        #                 decoder_num_heads,
-        #                 mlp_ratio,
-        #                 qkv_bias=True,
-        #                 norm_layer=norm_layer,
-        #             )
-        #             for i in range(2)
-        #         ]
-        #     )
-
-        #     self.nature_img_decoder_norm = norm_layer(decoder_embed_dim)
-        #     self.nature_img_decoder_pred = nn.Sequential(
-        #         nn.Conv1d(num_patches, 512, kernel_size=1, stride=1, bias=True),
-        #         nn.Linear(decoder_embed_dim, 28 * 28, bias=True),
-        #     )
-        #     # --------------------------------------------------------------------------
 
         self.patch_size = patch_size
         self.embed_dim = embed_dim
         self.focus_range = focus_range
         self.focus_rate = focus_rate
         self.img_recon_weight = img_recon_weight
-        self.use_nature_img_loss = use_nature_img_loss
 
         self.initialize_weights()
 
     def initialize_weights(self):
         # initialization
-        # initialize (and freeze) pos_embed by sin-cos embedding
         pos_embed = ut.get_1d_sincos_pos_embed(
             self.pos_embed.shape[-1], self.num_patches, cls_token=True
+        )
+        decoder_pos_embed = ut.get_1d_sincos_pos_embed(
+            self.decoder_pos_embed.shape[-1], self.num_patches, cls_token=True
         )
         self.pos_embed.data.copy_(
             torch.from_numpy(pos_embed).float().unsqueeze(0)
         )  # trasforma gli embedding in tensor
 
-        decoder_pos_embed = ut.get_1d_sincos_pos_embed(
-            self.decoder_pos_embed.shape[-1], self.num_patches, cls_token=True
-        )
         self.decoder_pos_embed.data.copy_(
             torch.from_numpy(decoder_pos_embed).float().unsqueeze(0)
         )  # trasforma gli embedding in tensor
-
-        # if self.use_nature_img_loss:
-        #     nature_img_decoder_pos_embed = ut.get_1d_sincos_pos_embed(
-        #         self.nature_img_decoder_pos_embed.shape[-1],
-        #         self.num_patches,
-        #         cls_token=True,
-        #     )
-        #     self.nature_img_decoder_pos_embed.data.copy_(
-        #         torch.from_numpy(nature_img_decoder_pos_embed).float().unsqueeze(0)
-        #     )
-        #     torch.nn.init.normal_(self.nature_img_mask_token, std=0.02)
 
         # initialize patch_embed like nn.Linear (instead of nn.Conv2d)
         w = self.patch_embed.proj.weight.data
@@ -317,30 +273,36 @@ class MaskedAutoEncoderEEG(nn.Module):
         return x_masked, mask, ids_restore
 
     def forward_encoder(self, x, mask_ratio):
-        # embed patches
-        x = self.patch_embed(x)  # patch di input nel modello
+        #x torch.Size([1, 1024, 128])
 
-        # add pos embed w/o cls token
+        # embed patches
+        x = self.patch_embed(x)  # patch di input nel modello torch.Size([1, 128, 1024])
+
+        # add pos embed with out the first column that is for the cls token
         x = (
-            x + self.pos_embed[:, 1:, :]
+            x + self.pos_embed[:, 1:, :] 
         )  # Aggiunge gli embedding posizionali senza il token di classe
-        # print('encoder embed')
-        # print(x.shape)
+
         # masking: length -> length * mask_ratio
         x, mask, ids_restore = self.random_masking(
             x, mask_ratio
         )  # Applica una mascheratura casuale all'input e restituisce l'output mascherato
+        #x torch.Size([1, 115, 1024])
 
-        # append cls token
+        # Crea un token di classe con l'embedding posizionale torch.Size([1, 1, 1024])
         cls_token = (
             self.cls_token + self.pos_embed[:, :1, :]
-        )  # Crea un token di classe con l'embedding posizionale
+        ) 
+
+        # Espande il token di classe per adattarlo alle dimensioni dell'input torch.Size([1, 116, 1024])
         cls_tokens = cls_token.expand(
             x.shape[0], -1, -1
-        )  # Espande il token di classe per adattarlo alle dimensioni dell'input
+        )  
+        # Aggiunge il token di classe all'inizio delle patch
         x = torch.cat(
             (cls_tokens, x), dim=1
-        )  # Aggiunge il token di classe all'inizio delle patch
+        )  
+        # x torch.Size([1, 116, 1024])
 
         # apply Transformer blocks
         for blk in self.blocks:
@@ -348,13 +310,18 @@ class MaskedAutoEncoderEEG(nn.Module):
                 x
             )  # Applica una serie di blocchi Transformer (self.blocks) all'input
         # Normalizza l'output utilizzando la normalizzazione di layer
+        # x torch.Size([1, 116, 1024])
         x = self.norm(x)
-
+        
         return x, mask, ids_restore
 
+    
+
     def forward_decoder(self, x, ids_restore=None):
+        #x torch.Size([1, 116, 1024])
+
         # embed tokens
-        x = self.decoder_embed(x)
+        x = self.decoder_embed(x) #torch.Size([1, 116, 512])
         # print('decoder embed')
         # print(x.shape)
 
@@ -363,6 +330,7 @@ class MaskedAutoEncoderEEG(nn.Module):
             x.shape[0], ids_restore.shape[1] + 1 - x.shape[1], 1
         )  # Concatena i token di decodifica e i token di maschera,
         x_ = torch.cat([x[:, 1:, :], mask_tokens], dim=1)  # no cls token
+
         # x_ = torch.cat([x, mask_tokens], dim=1)  # no cls token
         x_ = torch.gather(
             x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2])
@@ -384,7 +352,7 @@ class MaskedAutoEncoderEEG(nn.Module):
         )  # Normalizza l'output utilizzando la normalizzazione di layer
         # print(x.shape)
         # predictor projection
-        # Proietta l'output utilizzando uno strato lineare
+        # Implementando una trasformazione lineare (nn.Linear) Proietta l'output 
         x = self.decoder_pred(x)
         # print(x.shape)
 
@@ -393,45 +361,7 @@ class MaskedAutoEncoderEEG(nn.Module):
 
         return x  # Restituisce l'output decodificato
 
-    def forward_nature_img_decoder(self, x, ids_restore):
-        # embed tokens
-        x = self.nature_img_decoder_embed(x)
-
-        # append mask tokens to sequence
-        mask_tokens = self.nature_img_mask_token.repeat(
-            x.shape[0], ids_restore.shape[1] + 1 - x.shape[1], 1
-        )
-        x_ = torch.cat([x[:, 1:, :], mask_tokens], dim=1)  # no cls token
-        x_ = torch.gather(
-            x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2])
-        )  # unshuffle
-        x = torch.cat([x[:, :1, :], x_], dim=1)  # append cls token
-
-        # add pos embed
-        x = x + self.nature_img_decoder_pos_embed
-
-        # apply Transformer blocks
-        for blk in self.nature_img_decoder_blocks:
-            x = blk(x)
-        x = self.nature_img_decoder_norm(x)
-        # remove cls token
-        x = x[:, 1:, :]
-        # predictor projection
-        # x = x.mean(dim=1, keepdim=True)
-        x = self.nature_img_decoder_pred(x)
-        x = x.view(x.shape[0], 512, 28, 28)
-
-        return x  # n, 512, 28, 28
-
-    def forward_nature_img_loss(self, inputs, reconstructions):
-        loss = ((torch.tanh(inputs) - torch.tanh(reconstructions)) ** 2).mean()
-        if torch.isnan(reconstructions).sum():
-            print("nan in reconstructions")
-        if torch.isnan(inputs).sum():
-            print("nan in inputs")
-
-        return loss
-
+  
     def forward_loss(self, imgs, pred, mask):
         """
         imgs: [N, 1, num_voxels]
@@ -443,7 +373,7 @@ class MaskedAutoEncoderEEG(nn.Module):
         target = self.patchify(imgs)
         # target = imgs.transpose(1,2)
         loss = (pred - target) ** 2
-        loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
+        loss = loss.mean(dim=-1)  # [N, L], Mean Squared Error per patch
         # loss = loss.mean()
         loss = (
             (loss * mask).sum() /
@@ -451,43 +381,24 @@ class MaskedAutoEncoderEEG(nn.Module):
         )  # mean loss on removed patches
         return loss
 
-    def forward(self, imgs, img_features=None, valid_idx=None, mask_ratio=0.75):
+    def forward(self, imgs,  mask_ratio=0.75):
+        #imgs torch.Size([1, 128, 512])
+
         # latent = self.forward_encoder(imgs, mask_ratio)
         latent, mask, ids_restore = self.forward_encoder(
             imgs, mask_ratio
-        )  # Esegue la codifica delle immagini di input
-        # print(x)
-        # print(latent.shape)
-        # # print(mask)
-        # print(mask.shape)
-        # # print(ids_restore)
-        # print(ids_restore.shape)
+        )  # Esegue la codifica delle immagini di input masked
 
+        # latent torch.Size([1, 116, 1024])
+        
         pred = self.forward_decoder(
             latent, ids_restore
         )  # [N, L, p] # Esegue la decodifica
-        # pred = self.forward_decoder(latent)  # [N, L, p]
-        # pred = pred
-        # print(pred.shape)
-        # mask=None
+        # pred torch.Size([1, 128, 512])
+       
         loss = self.forward_loss(
             imgs, pred, mask
         )  # Calcola la perdita basata sulle immagini originali e le predizioni decodificate
         # print(self.unpatchify(pred.transpose(1,2)).shape)
-
-        if self.use_nature_img_loss and img_features is not None:
-            # valid_idx = torch.nonzero(nature_image.sum(dim=(1,2,3)) != 0).squeeze(1)
-            if len(valid_idx) != 0:
-                nature_image_recon = self.forward_nature_img_decoder(
-                    latent[valid_idx], ids_restore[valid_idx]
-                )
-                loss_nature_image_recon = self.forward_nature_img_loss(
-                    img_features, nature_image_recon
-                )
-                if torch.isnan(loss_nature_image_recon).sum():
-                    print(loss_nature_image_recon)
-                    print("loss_nature_image_recon is nan")
-
-                loss = loss + self.img_recon_weight * loss_nature_image_recon
 
         return loss, pred, mask

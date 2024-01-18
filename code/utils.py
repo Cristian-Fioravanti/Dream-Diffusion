@@ -93,13 +93,12 @@ def adjust_learning_rate(optimizer, epoch, config):
     return lr
 
 
-def save_model(config, epoch, model, optimizer, loss_scaler, checkpoint_paths):
+def save_model(config, epoch, model, optimizer, checkpoint_paths):
     os.makedirs(checkpoint_paths, exist_ok=True)
     to_save = {
         'model': model.state_dict(),
         'optimizer': optimizer.state_dict(),
         'epoch': epoch,
-        'scaler': loss_scaler.state_dict(),
         'config': config,
     }
     torch.save(to_save, os.path.join(checkpoint_paths, 'checkpoint.pth'))

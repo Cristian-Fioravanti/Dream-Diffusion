@@ -187,11 +187,13 @@ class Splitter:
         # Load split
         loaded = torch.load(split_path)
 
-        self.split_idx = loaded["splits"][split_num][split_name]
+        self.split_idx = loaded["splits"][split_num][split_name] #669 index
         # Filter data
-        self.split_idx = [i for i in self.split_idx if i <= len(
-            self.dataset.data) and 450 <= self.dataset.data[i]["eeg"].size(1) <= 600]
+        
+        #Mantieni gli indici che hanno la dimensione delle colonne del tensor tra 450 e 600
         # Compute size
+        # self.split_idx = [i for i in self.split_idx if i <= len(
+        #     self.dataset.data) and 450 <= self.dataset.data[i]["eeg"].size(1) <= 600] 
 
         self.size = len(self.split_idx)
         self.num_voxels = 440

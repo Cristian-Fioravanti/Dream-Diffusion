@@ -133,6 +133,21 @@ def get_args_parser():
 
     return parser
 
+def prepareOutputPath(config):
+    output_path = os.path.join(
+        config.output_path,
+        "results",
+        "generation",
+        "%s" % (datetime.datetime.now().strftime("%d-%m-%Y-%H-%M-%S")),
+    )
+    os.makedirs(output_path, exist_ok=True)
+
+    folder_init(config, output_path)
+    setattr(config, "output_path", output_path)
+    # config.output_path = output_path
+
+   
+    return config
 
 def folder_init(config, output_path):
     # wandb.init( project='dreamdiffusion',
@@ -142,12 +157,10 @@ def folder_init(config, output_path):
     #             reinit=True)
     create_readme(config, output_path)
 
-
 def create_readme(config, path):
     print(config.__dict__)
     with open(os.path.join(path, "README.md"), "w+") as f:
         print(config.__dict__, file=f)
-
 
 def update_config(args, config):
     for attr in config.__dict__:
@@ -190,18 +203,10 @@ if __name__ == "__main__":
         config = model_meta["config"]
         config.checkpoint_path = ckp
         print("Resuming from checkpoint: {}".format(config.checkpoint_path))
-
-    output_path = os.path.join(
-        config.output_path,
-        "results",
-        "generation",
-        "%s" % (datetime.datetime.now().strftime("%d-%m-%Y-%H-%M-%S")),
-    )
-    config.output_path = output_path
-    os.makedirs(output_path, exist_ok=True)
-
-    folder_init(config, output_path)
-
+    
+    prepareOutputPath(config)
+    
     # logger = WandbLogger()
     config.logger = None  # logger
     main(config)
+
