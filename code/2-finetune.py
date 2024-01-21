@@ -63,7 +63,6 @@ def main(config):
         pretrain_root=config.pretrain_gm_path,
         logger=config.logger,
         ddim_steps=config.ddim_steps,
-        global_pool=config.global_pool,
         use_time_cond=config.use_time_cond,
         clip_tune=config.clip_tune,
         cls_tune=config.cls_tune,
@@ -96,8 +95,8 @@ def main(config):
 
     # Generate images
     # Generate limited train images and generate images for subjects separately
-    ut.generate_images(generative_model, eeg_latents_dataset_train,
-                       eeg_latents_dataset_test, config)
+    # ut.generate_images(generative_model, eeg_latents_dataset_train,
+    #    eeg_latents_dataset_test, config)
 
     return
 
@@ -133,6 +132,7 @@ def get_args_parser():
 
     return parser
 
+
 def prepareOutputPath(config):
     output_path = os.path.join(
         config.output_path,
@@ -146,8 +146,8 @@ def prepareOutputPath(config):
     setattr(config, "output_path", output_path)
     # config.output_path = output_path
 
-   
     return config
+
 
 def folder_init(config, output_path):
     # wandb.init( project='dreamdiffusion',
@@ -157,10 +157,12 @@ def folder_init(config, output_path):
     #             reinit=True)
     create_readme(config, output_path)
 
+
 def create_readme(config, path):
     print(config.__dict__)
     with open(os.path.join(path, "README.md"), "w+") as f:
         print(config.__dict__, file=f)
+
 
 def update_config(args, config):
     for attr in config.__dict__:
@@ -203,10 +205,9 @@ if __name__ == "__main__":
         config = model_meta["config"]
         config.checkpoint_path = ckp
         print("Resuming from checkpoint: {}".format(config.checkpoint_path))
-    
+
     prepareOutputPath(config)
-    
+
     # logger = WandbLogger()
     config.logger = None  # logger
     main(config)
-

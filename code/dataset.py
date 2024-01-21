@@ -139,8 +139,8 @@ class EEGDataset(Dataset):
         self.data_len = 512
         # Compute size
         self.size = len(self.data)
-        self.processor = AutoProcessor.from_pretrained(
-            "openai/clip-vit-large-patch14")
+        # self.processor = AutoProcessor.from_pretrained(
+        #     "openai/clip-vit-large-patch14")
      # Get size
 
     def __len__(self):
@@ -171,10 +171,10 @@ class EEGDataset(Dataset):
         image_raw = Image.open(image_path).convert('RGB')
 
         image = np.array(image_raw) / 255.0
-        image_raw = self.processor(images=image_raw, return_tensors="pt")
-        image_raw['pixel_values'] = image_raw['pixel_values'].squeeze(0)
+        # image_raw = self.processor(images=image_raw, return_tensors="pt")
+        # image_raw['pixel_values'] = image_raw['pixel_values'].squeeze(0)
 
-        return {'eeg': eeg, 'label': label, 'image': self.image_transform(image), 'image_raw': image_raw}
+        return {'eeg': eeg, 'label': label, 'image': self.image_transform(image)}
         # Return
         # return eeg, label
 
