@@ -1,3 +1,8 @@
+from diffusers import DDPMScheduler, UNet2DConditionModel
+from PIL import Image
+import torch
+from pathlib import Path
+
 from encoder.eegEncoder import eegEncoder
 from config import Config_Generative_Model, Config_MBM_EEG
 from dataset import create_EEG_dataset
@@ -32,11 +37,12 @@ from einops import rearrange
 # 11 optimizer.zero_grad()
 
 def main(config):
+    logging_dir = os.path.join(config.output_path, "accLog/")
     ## 1 Caricare il modello pretrained
     pretrain_model = torch.load('..\dreamdiffusion\pretrains\eeg_pretrain\checkpoint.pth', map_location="cpu")
     metafile_config = pretrain_model['config']
-  
-
+    
+    
     ## 2 Prendere labeledEEG gli facciamo l'encoder per ricavare la noise
     # Training image transformations
     img_transform_train = transforms.Compose(
@@ -63,107 +69,75 @@ def main(config):
         subject=config.subject,
     )
     data_len_eeg = eeg_latents_dataset_train.data_len
+    accelerator_project_config = ProjectConfiguration(project_dir=config.output_path, logging_dir=logging_dir)
+    
+    accelerator = Accelerator(
+        gradient_accumulation_steps=1,
+        mixed_precision=None,
+        log_with="tensorboard",
+        project_config=accelerator_project_config,
+    )
+    # Carica il modello dalla cartella specificata
+    folder_path = "../dreamdiffusion/exps/results/generation/24-01-2024-18-41-32"
+    model_name = "checkpoint.pth"
+    model_path = Path(folder_path) / model_name
+    generative_model = torch.load(model_path)
+
     #Carico Encoder
     encoder = eegEncoder(time_len=data_len_eeg, patch_size=metafile_config.patch_size, embed_dim=metafile_config.embed_dim,
                         depth=metafile_config.depth, num_heads=metafile_config.num_heads)
    
-    encoder.load_checkpoint(pretrain_model['model'])
-    # Accelerator da vedere
-    accelerator = Accelerator(gradient_accumulation_steps=4, mixed_precision='fp16')
-   
+    scheduler = DDPMScheduler.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="scheduler")
     unet = UNet2DConditionModel.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="unet")
     vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae")
-
-    # scheduler = LMSDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
-    scheduler =  DDPMScheduler.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="scheduler")
-    clip_model, _ = CLIP.load(name="ViT-B/32", device="cpu")    
+    clip_model, preprocess = CLIP.load(name="ViT-B/32", device="cpu")    
     projector1 = nn.Linear(1024, 768)
     projection_layer = ProjectionLayerH(128 * 768, 512)   
+    unet.load_state_dict(generative_model['unet_state_dict'])
+    encoder.load_state_dict(generative_model['egg_encoder_state_dict'])
+    vae.load_state_dict(generative_model['vae_state_dict'])
+    clip_model.load_state_dict(generative_model['clip_model_state_dict'])
+    projector1.load_state_dict(generative_model['projector1'])
+    projection_layer.load_state_dict(generative_model['projection_layer'])
     
-    vae.required_grad=False
-    clip_model.required_grad=False
+    unet,encoder, vae,scheduler,projection_layer,projector1,clip_model,crop_transform =  accelerator.prepare(unet,encoder, vae,scheduler,projection_layer,projector1,clip_model,crop_transform)
     
-    unet.train()
-    encoder.train()
-    projector1.train()
-    projection_layer.train()
-    optimizer = torch.optim.AdamW(list(unet.parameters()) + 
-                                  list(encoder.parameters()) + 
-                                  list(projector1.parameters()) + 
-                                  list(projection_layer.parameters()),lr=config.lr,)
-    
-    unet,encoder, vae,scheduler,optimizer,projection_layer,projector1,clip_model,crop_transform =  accelerator.prepare(unet,encoder, vae,scheduler,optimizer,projection_layer,projector1,clip_model,crop_transform)
-    ## For Epoch
-    train_loss = 0.0
-    for epoch in range(0, config.num_epoch):
-        print(f"Epoch: {epoch}")
-        for step, batch in enumerate(eeg_latents_dataset_train ):
-            eeg = batch["eeg"]
-            image = batch["image"]
-            with accelerator.accumulate(unet, encoder,projector1,projection_layer):
-                embeddings = encoder(eeg) #from torch.Size([128, 512]) to torch.Size([1, 128, 1024])
-                hidden_states = projector1(embeddings)
-                image_for_encode = change_shape_for_encode(image)
-                # Convert images to latent space
-                latents = vae.encode(image_for_encode).latent_dist.sample() # need torch.Size([1, 3, 64, 64])
-                latents = latents * vae.config.scaling_factor
+    for step, batch in enumerate(eeg_latents_dataset_test ):
+        eeg = batch["eeg"]
+        image = batch["image"]
+        embeddings = encoder(eeg) 
+        hidden_states = projector1(embeddings)
+        image_for_encode = change_shape_for_encode(image)
 
-                # 3 aggiungiamo a questa noise una randomNoise
-                # Sample noise that we'll add to the latents
-                noise = torch.randn_like(latents).to(accelerator.device)
+        latents = vae.encode(image_for_encode).latent_dist.sample() 
+        latents = latents * vae.config.scaling_factor
 
-                bsz = latents.shape[0]
-                # Sample a random timestep for each image
-                timesteps = torch.randint(0, 1000, (bsz,), device=latents.device)
-                timesteps = timesteps.long()
+        input = torch.randn_like(latents).to(accelerator.device)
 
-                # Add noise to the latents according to the noise magnitude at each timestep
-                # (this is the forward diffusion process)
+        bsz = latents.shape[0]
+        timesteps = torch.randint(0, 1000, (bsz,), device=latents.device)
+        timesteps = timesteps.long()
+        
+        for t in timesteps:
+            with torch.no_grad():
                 
-                noisy_latents = scheduler.add_noise(latents, noise, timesteps)
-              
-                # 4 passare tutto alla uNET per poi calcolarci la loss A
-                # Predict the noise residual and compute loss
-                model_pred = unet(noisy_latents, timesteps, hidden_states, return_dict=False)[0] #RuntimeError: mat1 and mat2 shapes cannot be multiplied (128x1024 and 768x320)
-                loss_unet = F.mse_loss(model_pred,noise,reduction="mean")
-                
-                # 5 prendo l'immagine dell'egg relativo, lo croppo    
-                image_cropped= crop_transform(image_for_encode)
-                # 6 uso l'encoder di clip per trovare l'embedding dell'immagine
-                image_encoded = clip_model.encode_image(image_cropped)
-                
-                # 7 utilizzo una projection per poter confrontare i due embedding trovati
-                projection = projection_layer(hidden_states)
-                # 8 calcolo la cosine-similarity tra i due embeddign, ricevendo un altra loss B
+                noisy_residual = unet(input, timesteps, hidden_states, return_dict=False)[0]
+                prev_noisy_sample = scheduler.step(noisy_residual, t, input).prev_sample
+                input = prev_noisy_sample
 
-                # hidden_states.shape torch.Size([1, 128, 768])
-                # projection   .shape torch.Size([1, 128, 512])
-                # image_encoded.shape torch.Size([1, 512])
-                loss_clip = 1 - F.cosine_similarity(image_encoded,projection)
-                
-                # 9 somme le due loss (A + B)
-                total_loss = loss_unet + loss_clip
-                print(total_loss)
+        input = 1 / 0.18215 * input
+        with torch.no_grad():
+            image_gen = vae.decode(latents).sample
+        
+        image_gen = (input / 2 + 0.5).clamp(0, 1)
+        image_gen = image_gen.cpu().permute(0, 2, 3, 1).numpy()[0]
+        image_gen = Image.fromarray((image_gen * 255).round().astype("uint8"))
+        
+        image_gen_path = os.path.join(config.output_path, 
+                        f'./test{step}.png')
+        
+        image_gen.save(image_gen_path)
 
-                accelerator.backward(total_loss)
-                optimizer.step()
-                optimizer.zero_grad()
-        if (epoch + 1 == config.num_epoch):  # and ep != 0
-                
-                    torch.save(
-                    {
-                       'unet_state_dict': unet.state_dict(),
-                        'egg_encoder_state_dict': encoder.state_dict(),
-                        'vae_state_dict': vae.state_dict(),
-                        # 'scheduler_state_dict': scheduler.state_dict(),
-                        'clip_model_state_dict': clip_model.state_dict(),
-                        'projector1': projector1.state_dict(),
-                        'projection_layer': projection_layer.state_dict(),
-                        'config': config,
-                        'state': torch.random.get_rng_state()
-
-                    },
-                    os.path.join(config.output_path, 'checkpoint.pth'))        
                 
                 
 class ProjectionLayerH(nn.Module):
@@ -178,18 +152,6 @@ class ProjectionLayerH(nn.Module):
         x = self.projection(x)
         return x
 
-
-
-def save_model(config, epoch, model, optimizer, loss_scaler, checkpoint_paths):
-    os.makedirs(checkpoint_paths, exist_ok=True)
-    to_save = {
-        'model': model.state_dict(),
-        'optimizer': optimizer.state_dict(),
-        'epoch': epoch,
-        'scaler': loss_scaler.state_dict(),
-        'config': config,
-    }
-    torch.save(to_save, os.path.join(checkpoint_paths, 'checkpoint.pth'))
     
 def prepareOutputPath(config):
     output_path = os.path.join(
