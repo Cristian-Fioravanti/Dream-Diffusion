@@ -95,7 +95,7 @@ def main(config):
     ## For Epoch
     train_loss = 0.0
     for epoch in range(0, config.num_epoch):
-        current_dateTime = datetime.now()
+        current_dateTime = datetime.datetime.now()
         print("DataInizio: "+ current_dateTime)
         print(f"Epoch: {epoch}")
         for step, batch in enumerate(eeg_latents_dataset_train ):
@@ -150,7 +150,7 @@ def main(config):
                 accelerator.backward(total_loss)
                 optimizer.step()
                 optimizer.zero_grad()
-        current_dateTime = datetime.now()
+        current_dateTime = datetime.datetime.now()
         print("DataFine: "+ current_dateTime)
         torch.save(
                     {
