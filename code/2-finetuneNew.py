@@ -145,7 +145,7 @@ def main(config):
                 
                 # 9 somme le due loss (A + B)
                 total_loss = loss_unet + loss_clip
-                print(total_loss.item() + " Step: "+ step)
+                print(f"{total_loss.item()} Step: {str(step)}")
                 
                 accelerator.backward(total_loss)
                 optimizer.step()
