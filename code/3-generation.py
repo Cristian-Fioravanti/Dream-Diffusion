@@ -78,7 +78,7 @@ def main(config):
         project_config=accelerator_project_config,
     )
     # Carica il modello dalla cartella specificata
-    folder_path = "../dreamdiffusion/exps/results/generation/24-01-2024-18-41-32"
+    folder_path = "../dreamdiffusion/exps/results/generation/25-01-2024-17-05-57"
     model_name = "checkpoint.pth"
     model_path = Path(folder_path) / model_name
     generative_model = torch.load(model_path)
@@ -92,16 +92,13 @@ def main(config):
     vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae")
     clip_model, preprocess = CLIP.load(name="ViT-B/32", device="cpu")    
     projector1 = nn.Linear(1024, 768)
-    projection_layer = ProjectionLayerH(128 * 768, 512)   
+
     unet.load_state_dict(generative_model['unet_state_dict'])
     encoder.load_state_dict(generative_model['egg_encoder_state_dict'])
     vae.load_state_dict(generative_model['vae_state_dict'])
     clip_model.load_state_dict(generative_model['clip_model_state_dict'])
     projector1.load_state_dict(generative_model['projector1'])
-    projection_layer.load_state_dict(generative_model['projection_layer'])
-    
-    unet,encoder, vae,scheduler,projection_layer,projector1,clip_model,crop_transform =  accelerator.prepare(unet,encoder, vae,scheduler,projection_layer,projector1,clip_model,crop_transform)
-    
+        
     for step, batch in enumerate(eeg_latents_dataset_test ):
         eeg = batch["eeg"]
         image = batch["image"]
@@ -114,8 +111,7 @@ def main(config):
 
         input = torch.randn_like(latents).to(accelerator.device)
 
-        bsz = latents.shape[0]
-        timesteps = torch.randint(0, 1000, (bsz,), device=latents.device)
+        timesteps = torch.randint(0, 1000, (1,), device=latents.device)
         timesteps = timesteps.long()
         
         for t in timesteps:

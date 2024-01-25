@@ -82,28 +82,30 @@ def main(config):
     
     vae.required_grad=False
     clip_model.required_grad=False
-    
+    projection_layer.required_grad=False
+
     unet.train()
     encoder.train()
     projector1.train()
-    projection_layer.train()
     optimizer = torch.optim.AdamW(list(unet.parameters()) + 
                                   list(encoder.parameters()) + 
-                                  list(projector1.parameters()) + 
-                                  list(projection_layer.parameters()),lr=config.lr,)
+                                  list(projector1.parameters()),lr=config.lr)
     
-    unet,encoder, vae,scheduler,optimizer,projection_layer,projector1,clip_model,crop_transform =  accelerator.prepare(unet,encoder, vae,scheduler,optimizer,projection_layer,projector1,clip_model,crop_transform)
+    unet,encoder, vae,scheduler,optimizer,projector1,clip_model,crop_transform =  accelerator.prepare(unet,encoder, vae,scheduler,optimizer,projector1,clip_model,crop_transform)
     ## For Epoch
     train_loss = 0.0
     for epoch in range(0, config.num_epoch):
+        current_dateTime = datetime.now()
+        print("DataInizio: "+ current_dateTime)
         print(f"Epoch: {epoch}")
         for step, batch in enumerate(eeg_latents_dataset_train ):
             eeg = batch["eeg"]
             image = batch["image"]
-            with accelerator.accumulate(unet, encoder,projector1,projection_layer):
+            with accelerator.accumulate(unet, encoder,projector1):
                 embeddings = encoder(eeg) #from torch.Size([128, 512]) to torch.Size([1, 128, 1024])
                 hidden_states = projector1(embeddings)
                 image_for_encode = change_shape_for_encode(image)
+                
                 # Convert images to latent space
                 latents = vae.encode(image_for_encode).latent_dist.sample() # need torch.Size([1, 3, 64, 64])
                 latents = latents * vae.config.scaling_factor
@@ -112,9 +114,9 @@ def main(config):
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents).to(accelerator.device)
 
-                bsz = latents.shape[0]
+                #bsz = latents.shape[0]
                 # Sample a random timestep for each image
-                timesteps = torch.randint(0, 1000, (bsz,), device=latents.device)
+                timesteps = torch.randint(0, 1000, (1,), device=latents.device)
                 timesteps = timesteps.long()
 
                 # Add noise to the latents according to the noise magnitude at each timestep
@@ -143,14 +145,14 @@ def main(config):
                 
                 # 9 somme le due loss (A + B)
                 total_loss = loss_unet + loss_clip
-                print(total_loss)
-
+                print(total_loss.item() + " Step: "+ step)
+                
                 accelerator.backward(total_loss)
                 optimizer.step()
                 optimizer.zero_grad()
-        if (epoch + 1 == config.num_epoch):  # and ep != 0
-                
-                    torch.save(
+        current_dateTime = datetime.now()
+        print("DataFine: "+ current_dateTime)
+        torch.save(
                     {
                        'unet_state_dict': unet.state_dict(),
                         'egg_encoder_state_dict': encoder.state_dict(),
@@ -158,12 +160,11 @@ def main(config):
                         # 'scheduler_state_dict': scheduler.state_dict(),
                         'clip_model_state_dict': clip_model.state_dict(),
                         'projector1': projector1.state_dict(),
-                        'projection_layer': projection_layer.state_dict(),
                         'config': config,
                         'state': torch.random.get_rng_state()
 
                     },
-                    os.path.join(config.output_path, 'checkpoint.pth'))        
+                    os.path.join(config.output_path, 'checkpoint.pth'))                      
                 
                 
 class ProjectionLayerH(nn.Module):
