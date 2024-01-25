@@ -96,7 +96,7 @@ def main(config):
     train_loss = 0.0
     for epoch in range(0, config.num_epoch):
         current_dateTime = datetime.datetime.now()
-        print("DataInizio: "+ current_dateTime)
+        print("DataInizio: "+ str(current_dateTime))
         print(f"Epoch: {epoch}")
         for step, batch in enumerate(eeg_latents_dataset_train ):
             eeg = batch["eeg"]
@@ -151,7 +151,7 @@ def main(config):
                 optimizer.step()
                 optimizer.zero_grad()
         current_dateTime = datetime.datetime.now()
-        print("DataFine: "+ current_dateTime)
+        print("DataFine: "+ str(current_dateTime))
         torch.save(
                     {
                        'unet_state_dict': unet.state_dict(),
