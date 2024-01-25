@@ -3,7 +3,7 @@ from config import Config_Generative_Model, Config_MBM_EEG
 from dataset import create_EEG_dataset
 from diffusers import AutoencoderKL, DDPMScheduler,LMSDiscreteScheduler, StableDiffusionPipeline, UNet2DConditionModel
 from diffusers import LMSDiscreteScheduler
-
+import math
 import torch
 import torch.nn as nn
 import argparse
@@ -145,6 +145,8 @@ def main(config):
                 
                 # 9 somme le due loss (A + B)
                 total_loss = loss_unet + loss_clip
+                if (math.isfinite(total_loss.item()) == False): exit(1)
+
                 print(str(total_loss.item()) + " Step: "+ str(step))
                 
                 accelerator.backward(total_loss)
