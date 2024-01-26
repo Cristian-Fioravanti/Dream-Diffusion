@@ -22,6 +22,7 @@ from transformers import CLIPTextModel
 import torch.nn.functional as F
 import clip as CLIP
 from einops import rearrange
+from tqdm.auto import tqdm
 # 1 Caricare il modello pretrained V
 # 2 Prendere labeledEEG gli facciamo l'encoder per ricavare la noise 
 # 3 aggiungiamo a questa noise una randomNoise
@@ -78,7 +79,7 @@ def main(config):
         project_config=accelerator_project_config,
     )
     # Carica il modello dalla cartella specificata
-    folder_path = "../dreamdiffusion/exps/results/generation/25-01-2024-17-05-57"
+    folder_path = "../dreamdiffusion/exps/results/generation/25-01-2024-19-58-44"
     model_name = "checkpoint.pth"
     model_path = Path(folder_path) / model_name
     generative_model = torch.load(model_path)
@@ -111,21 +112,20 @@ def main(config):
 
         input = torch.randn_like(latents).to(accelerator.device)
 
-        timesteps = torch.randint(0, 1000, (1,), device=latents.device)
-        timesteps = timesteps.long()
-        
-        for t in timesteps:
+        # timesteps = torch.randint(0, 1000, (1,), device=latents.device)
+        timesteps = 999
+        scheduler.set_timesteps(timesteps)
+        for t in tqdm(scheduler.timesteps):
             with torch.no_grad():
-                
-                noisy_residual = unet(input, timesteps, hidden_states, return_dict=False)[0]
+                noisy_residual = unet(input, t, hidden_states, return_dict=False)[0]
                 prev_noisy_sample = scheduler.step(noisy_residual, t, input).prev_sample
                 input = prev_noisy_sample
 
         input = 1 / 0.18215 * input
         with torch.no_grad():
-            image_gen = vae.decode(latents).sample
+            image_gen = vae.decode(input).sample
         
-        image_gen = (input / 2 + 0.5).clamp(0, 1)
+        image_gen = (image_gen / 2 + 0.5).clamp(0, 1)
         image_gen = image_gen.cpu().permute(0, 2, 3, 1).numpy()[0]
         image_gen = Image.fromarray((image_gen * 255).round().astype("uint8"))
         
