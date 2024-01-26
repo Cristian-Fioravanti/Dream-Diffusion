@@ -2,3 +2,15 @@
 /results
 /pretrains
 /exps
+code/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz
+*.pyzw
+
+
+
+
+
