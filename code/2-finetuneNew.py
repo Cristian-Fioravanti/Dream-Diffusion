@@ -3,7 +3,7 @@ from config import Config_Generative_Model, Config_MBM_EEG
 from dataset import create_EEG_dataset
 from diffusers import AutoencoderKL, DDPMScheduler,LMSDiscreteScheduler, StableDiffusionPipeline, UNet2DConditionModel
 from diffusers import LMSDiscreteScheduler
-
+import math
 import torch
 import torch.nn as nn
 import argparse
@@ -145,6 +145,8 @@ def main(config):
                 
                 # 9 somme le due loss (A + B)
                 total_loss = loss_unet + loss_clip
+                if (math.isfinite(total_loss.item()) == False): exit(1)
+                
                 print(f"{total_loss.item()} Step: {str(step)}")
                 
                 accelerator.backward(total_loss)
@@ -153,18 +155,18 @@ def main(config):
         current_dateTime = datetime.datetime.now()
         print("DataFine: "+ str(current_dateTime))
         torch.save(
-                    {
-                       'unet_state_dict': unet.state_dict(),
-                        'egg_encoder_state_dict': encoder.state_dict(),
-                        'vae_state_dict': vae.state_dict(),
-                        # 'scheduler_state_dict': scheduler.state_dict(),
-                        'clip_model_state_dict': clip_model.state_dict(),
-                        'projector1': projector1.state_dict(),
-                        'config': config,
-                        'state': torch.random.get_rng_state()
+            {
+                'unet_state_dict': unet.state_dict(),
+                'egg_encoder_state_dict': encoder.state_dict(),
+                'vae_state_dict': vae.state_dict(),
+                # 'scheduler_state_dict': scheduler.state_dict(),
+                'clip_model_state_dict': clip_model.state_dict(),
+                'projector1': projector1.state_dict(),
+                'config': config,
+                'state': torch.random.get_rng_state()
 
-                    },
-                    os.path.join(config.output_path, 'checkpoint.pth'))                      
+            },
+            os.path.join(config.output_path, 'checkpoint.pth'))                      
                 
                 
 class ProjectionLayerH(nn.Module):
