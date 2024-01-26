@@ -59,9 +59,9 @@ class Config_MBM_EEG:
 class Config_EEG_finetune:
     def __init__(self):
         # Project setting
-        self.root_path = "../dreamdiffusion/"
+        self.root_path = ""
         # self.root_path = '.'
-        self.output_path = "../dreamdiffusion/exps/"
+        self.output_path = "exps/"
 
         self.eeg_signals_path = os.path.join(
             self.root_path, "datasets/eeg_5_95_std.pth"
@@ -72,7 +72,7 @@ class Config_EEG_finetune:
 
         self.dataset = "EEG"
         self.pretrain_mbm_path = (
-            "../dreamdiffusion/pretrains/eeg_pretrain/checkpoint.pth"
+            "pretrains/eeg_pretrain/checkpoint.pth"
         )
 
         self.include_nonavg_test = True
@@ -100,8 +100,8 @@ class Config_Generative_Model:
     def __init__(self):
         # project parameters
         self.seed = 2022
-        self.root_path = "../dreamdiffusion/"
-        self.output_path = "../dreamdiffusion/exps/"
+        self.root_path = ""
+        self.output_path = "exps/"
 
         self.eeg_signals_path = os.path.join(
             self.root_path, "datasets/eeg_5_95_std.pth"
@@ -120,7 +120,7 @@ class Config_Generative_Model:
         self.pretrain_gm_path = os.path.join(self.root_path, "pretrains")
 
         self.dataset = "EEG"
-        self.pretrain_mbm_path = '../dreamdiffusion/pretrains/eeg_pretrain/checkpoint.pth' # None cri 
+        self.pretrain_mbm_path = 'pretrains/eeg_pretrain/checkpoint.pth' # None cri 
 
 
         self.img_size = 512
@@ -128,7 +128,7 @@ class Config_Generative_Model:
         np.random.seed(self.seed)
         # finetune parameters
         self.batch_size = 5 if self.dataset == "GOD" else 25
-        self.lr = 1.2e-5
+        self.lr = 1.0e-6
         self.num_epoch = 500
 
         self.precision = 32
