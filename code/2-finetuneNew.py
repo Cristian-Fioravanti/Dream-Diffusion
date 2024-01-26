@@ -86,9 +86,9 @@ def main(config):
     encoder.to("cuda")
     unet.to("cuda")
     vae.to("cuda")
-    scheduler.to("cuda")
+    # projection_layer.to("cuda")
     projector1.to("cuda")
-    clip_model.to("cuda")
+    # clip_model.to("cuda")
 
     unet.train()
     encoder.train()
@@ -108,12 +108,12 @@ def main(config):
             eeg = batch["eeg"].to("cuda")
             image = batch["image"].to("cuda")
             with accelerator.accumulate(unet, encoder,projector1):
-                embeddings = encoder(eeg.to("cuda")) #from torch.Size([128, 512]) to torch.Size([1, 128, 1024])
+                embeddings = encoder(eeg) #from torch.Size([128, 512]) to torch.Size([1, 128, 1024])
                 hidden_states = projector1(embeddings)
-                image_for_encode = change_shape_for_encode(image)
+                image_for_encode = change_shape_for_encode(image).to("cuda")
                 
                 # Convert images to latent space
-                latents = vae.encode(image_for_encode.to("cuda")).latent_dist.sample()
+                latents = vae.encode(image_for_encode).latent_dist.sample()
                 latents = latents * vae.config.scaling_factor
 
                 # 3 aggiungiamo a questa noise una randomNoise
@@ -128,36 +128,40 @@ def main(config):
                 # Add noise to the latents according to the noise magnitude at each timestep
                 # (this is the forward diffusion process)
                 
-                noisy_latents = scheduler.add_noise(latents, noise.to("cuda"), timesteps)
+                noisy_latents = scheduler.add_noise(latents, noise, timesteps)
 
                 # 4 passare tutto alla uNET per poi calcolarci la loss A
                 # Predict the noise residual and compute loss
                 model_pred = unet(noisy_latents, timesteps, hidden_states, return_dict=False)[0].to("cuda")
-                loss_unet = F.mse_loss(model_pred, noise.to("cuda"), reduction="mean")
+                loss_unet = F.mse_loss(model_pred, noise, reduction="mean").to("cpu")
 
                 # 5 prendo l'immagine dell'egg relativo, lo croppo    
-                image_cropped = crop_transform(image_for_encode.to("cuda"))
+                image_cropped = crop_transform(image_for_encode)
                 # 6 uso l'encoder di clip per trovare l'embedding dell'immagine
-                image_encoded = clip_model.encode_image(image_cropped)
+                image_encoded = clip_model.encode_image(image_cropped).to("cpu")
                 
                 # 7 utilizzo una projection per poter confrontare i due embedding trovati
-                projection = projection_layer(hidden_states)
+                projection = projection_layer(hidden_states.to("cpu"))
                 # 8 calcolo la cosine-similarity tra i due embeddign, ricevendo un altra loss B
 
                 # hidden_states.shape torch.Size([1, 128, 768])
                 # projection   .shape torch.Size([1, 128, 512])
                 # image_encoded.shape torch.Size([1, 512])
-                loss_clip = 1 - F.cosine_similarity(image_encoded.to("cuda"), projection)
+                loss_clip = 1 - F.cosine_similarity(image_encoded, projection)
                 
                 # 9 somme le due loss (A + B)
                 total_loss = loss_unet + loss_clip
                 if (math.isfinite(total_loss.item()) == False): exit(1)
 
-                print(str(total_loss.item()) + " Step: "+ str(step))
-                
-                accelerator.backward(total_loss)
+                del noise, eeg, image, image_for_encode, timesteps, model_pred
+
+                accelerator.backward(total_loss.to("cuda"))
+
+                del total_loss, projection
+
                 optimizer.step()
                 optimizer.zero_grad()
+                print(str(total_loss.item()) + " Step: "+ str(step))
         current_dateTime = datetime.datetime.now()
         print("DataFine: "+ str(current_dateTime))
         torch.save(
