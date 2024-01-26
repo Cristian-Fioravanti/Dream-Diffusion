@@ -33,7 +33,7 @@ from einops import rearrange
 
 def main(config):
     ## 1 Caricare il modello pretrained
-    pretrain_model = torch.load('..\dreamdiffusion\pretrains\eeg_pretrain\checkpoint.pth', map_location="cpu")
+    pretrain_model = torch.load('..\dreamdiffusion\pretrains\eeg_pretrain\checkpoint.pth', map_location="cuda" if torch.cuda.is_available() else "cpu")
     metafile_config = pretrain_model['config']
   
 
@@ -65,8 +65,8 @@ def main(config):
     data_len_eeg = eeg_latents_dataset_train.data_len
     #Carico Encoder
     encoder = eegEncoder(time_len=data_len_eeg, patch_size=metafile_config.patch_size, embed_dim=metafile_config.embed_dim,
-                        depth=metafile_config.depth, num_heads=metafile_config.num_heads)
-   
+                         depth=metafile_config.depth, num_heads=metafile_config.num_heads)
+    
     encoder.load_checkpoint(pretrain_model['model'])
     # Accelerator da vedere
     accelerator = Accelerator(gradient_accumulation_steps=4, mixed_precision='fp16')
@@ -83,6 +83,12 @@ def main(config):
     vae.required_grad=False
     clip_model.required_grad=False
     projection_layer.required_grad=False
+    encoder.to("cuda")
+    unet.to("cuda")
+    vae.to("cuda")
+    scheduler.to("cuda")
+    projector1.to("cuda")
+    clip_model.to("cuda")
 
     unet.train()
     encoder.train()
@@ -99,15 +105,15 @@ def main(config):
         print("DataInizio: "+ str(current_dateTime))
         print(f"Epoch: {epoch}")
         for step, batch in enumerate(eeg_latents_dataset_train ):
-            eeg = batch["eeg"]
-            image = batch["image"]
+            eeg = batch["eeg"].to("cuda")
+            image = batch["image"].to("cuda")
             with accelerator.accumulate(unet, encoder,projector1):
-                embeddings = encoder(eeg) #from torch.Size([128, 512]) to torch.Size([1, 128, 1024])
+                embeddings = encoder(eeg.to("cuda")) #from torch.Size([128, 512]) to torch.Size([1, 128, 1024])
                 hidden_states = projector1(embeddings)
                 image_for_encode = change_shape_for_encode(image)
                 
                 # Convert images to latent space
-                latents = vae.encode(image_for_encode).latent_dist.sample() # need torch.Size([1, 3, 64, 64])
+                latents = vae.encode(image_for_encode.to("cuda")).latent_dist.sample()
                 latents = latents * vae.config.scaling_factor
 
                 # 3 aggiungiamo a questa noise una randomNoise
@@ -122,15 +128,15 @@ def main(config):
                 # Add noise to the latents according to the noise magnitude at each timestep
                 # (this is the forward diffusion process)
                 
-                noisy_latents = scheduler.add_noise(latents, noise, timesteps)
-              
+                noisy_latents = scheduler.add_noise(latents, noise.to("cuda"), timesteps)
+
                 # 4 passare tutto alla uNET per poi calcolarci la loss A
                 # Predict the noise residual and compute loss
-                model_pred = unet(noisy_latents, timesteps, hidden_states, return_dict=False)[0] #RuntimeError: mat1 and mat2 shapes cannot be multiplied (128x1024 and 768x320)
-                loss_unet = F.mse_loss(model_pred,noise,reduction="mean")
-                
+                model_pred = unet(noisy_latents, timesteps, hidden_states, return_dict=False)[0].to("cuda")
+                loss_unet = F.mse_loss(model_pred, noise.to("cuda"), reduction="mean")
+
                 # 5 prendo l'immagine dell'egg relativo, lo croppo    
-                image_cropped= crop_transform(image_for_encode)
+                image_cropped = crop_transform(image_for_encode.to("cuda"))
                 # 6 uso l'encoder di clip per trovare l'embedding dell'immagine
                 image_encoded = clip_model.encode_image(image_cropped)
                 
@@ -141,7 +147,7 @@ def main(config):
                 # hidden_states.shape torch.Size([1, 128, 768])
                 # projection   .shape torch.Size([1, 128, 512])
                 # image_encoded.shape torch.Size([1, 512])
-                loss_clip = 1 - F.cosine_similarity(image_encoded,projection)
+                loss_clip = 1 - F.cosine_similarity(image_encoded.to("cuda"), projection)
                 
                 # 9 somme le due loss (A + B)
                 total_loss = loss_unet + loss_clip
@@ -274,12 +280,12 @@ if __name__ == "__main__":
     config = update_config(args, config)
 
     if config.checkpoint_path is not None:
-        model_meta = torch.load(config.checkpoint_path, map_location="cpu")
+        model_meta = torch.load(config.checkpoint_path, map_location="cuda" if torch.cuda.is_available() else "cpu")
         ckp = config.checkpoint_path
         config = model_meta["config"]
         config.checkpoint_path = ckp
         print("Resuming from checkpoint: {}".format(config.checkpoint_path))
-
+    
     prepareOutputPath(config)
 
     # logger = WandbLogger()
