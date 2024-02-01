@@ -6,7 +6,7 @@ from encoder.maskedAutoEncoder import CustomBlock, PatchEmbed1D
 import utils as ut
 
 class eegEncoder(nn.Module):
-    def __init__(self, time_len=512, patch_size=4, embed_dim=1024, in_chans=128,
+    def __init__(self, time_len=512, patch_size=4, embed_dim=512, in_chans=128,
                  depth=24, num_heads=16, norm_layer=nn.LayerNorm):
         super().__init__()
         self.patch_embed = PatchEmbed1D(

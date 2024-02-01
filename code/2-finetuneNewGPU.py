@@ -17,7 +17,6 @@ from transformers import CLIPTextModel
 import torch.nn.functional as F
 import clip as CLIP
 from einops import rearrange
-import signal
 # 1 Caricare il modello pretrained V
 # 2 Prendere labeledEEG gli facciamo l'encoder per ricavare la noise
 # 3 aggiungiamo a questa noise una randomNoise
@@ -35,8 +34,8 @@ import signal
 
 def main(config):
     # 1 Caricare il modello pretrained
-    pretrain_model = torch.load(
-        '..\dreamdiffusion\pretrains\eeg_pretrain\checkpoint.pth', map_location="cpu")
+    pretrain_model = torch.load('..\dreamdiffusion\pretrains\eeg_pretrain\checkpoint.pth',
+                                map_location="cuda" if torch.cuda.is_available() else "cpu")
     metafile_config = pretrain_model['config']
 
     # 2 Prendere labeledEEG gli facciamo l'encoder per ricavare la noise
@@ -75,20 +74,26 @@ def main(config):
         gradient_accumulation_steps=4, mixed_precision='fp16')
 
     unet = UNet2DConditionModel.from_pretrained(
-        "runwayml/stable-diffusion-v1-5", subfolder="unet")
+        "CompVis/stable-diffusion-v1-4", subfolder="unet")
     vae = AutoencoderKL.from_pretrained(
-        "runwayml/stable-diffusion-v1-5", subfolder="vae")
+        "CompVis/stable-diffusion-v1-4", subfolder="vae")
 
     # scheduler = LMSDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
     scheduler = DDPMScheduler.from_pretrained(
-        "runwayml/stable-diffusion-v1-5", subfolder="scheduler")
-    clip_model, _ = CLIP.load(name="ViT-L/14", device="cpu")
-    projector1 = ProjectionLayerEmbedding(65536, 59136)
-    projection_layer = ProjectionLayer(29568, 768)
+        "CompVis/stable-diffusion-v1-4", subfolder="scheduler")
+    clip_model, _ = CLIP.load(name="ViT-B/32", device="cpu")
+    projector1 = nn.Linear(1024, 768)
+    projection_layer = ProjectionLayerH(128 * 768, 512)
 
     vae.required_grad = False
     clip_model.required_grad = False
     projection_layer.required_grad = False
+    encoder.to("cuda")
+    unet.to("cuda")
+    vae.to("cuda")
+    # projection_layer.to("cuda")
+    projector1.to("cuda")
+    # clip_model.to("cuda")
 
     unet.train()
     encoder.train()
@@ -107,18 +112,16 @@ def main(config):
             print("DataInizio: " + str(current_dateTime))
             print(f"Epoch: {epoch}")
             for step, batch in enumerate(eeg_latents_dataset_train):
-                eeg = batch["eeg"]
-                image = batch["image"]
+                eeg = batch["eeg"].to("cuda")
+                image = batch["image"].to("cuda")
                 with accelerator.accumulate(unet, encoder, projector1):
                     # from torch.Size([128, 512]) to torch.Size([1, 128, 1024])
-                    # Creare il tensore originale
                     embeddings = encoder(eeg)
-                    hidden_states = projector1(embeddings)            
-
-                    image_for_encode = change_shape_for_encode(image)
+                    hidden_states = projector1(embeddings)
+                    image_for_encode = change_shape_for_encode(
+                        image).to("cuda")
 
                     # Convert images to latent space
-                    # need torch.Size([1, 3, 64, 64])
                     latents = vae.encode(image_for_encode).latent_dist.sample()
                     latents = latents * vae.config.scaling_factor
 
@@ -140,41 +143,45 @@ def main(config):
 
                     # 4 passare tutto alla uNET per poi calcolarci la loss A
                     # Predict the noise residual and compute loss
-                    # RuntimeError: mat1 and mat2 shapes cannot be multiplied (128x1024 and 768x320)
-                    model_pred = unet(noisy_latents, timesteps,
-                                      hidden_states.unsqueeze(0), return_dict=False)[0]
-                    loss_unet = F.mse_loss(model_pred, noise, reduction="mean")
+                    model_pred = unet(noisy_latents, timesteps, hidden_states, return_dict=False)[
+                        0].to("cuda")
+                    loss_unet = F.mse_loss(
+                        model_pred, noise, reduction="mean").to("cpu")
 
                     # 5 prendo l'immagine dell'egg relativo, lo croppo
                     image_cropped = crop_transform(image_for_encode)
                     # 6 uso l'encoder di clip per trovare l'embedding dell'immagine
-                    image_encoded = clip_model.encode_image(image_cropped)
+                    image_encoded = clip_model.encode_image(
+                        image_cropped).to("cpu")
 
                     # 7 utilizzo una projection per poter confrontare i due embedding trovati
-                    projection = projection_layer(hidden_states)
+                    projection = projection_layer(hidden_states.to("cpu"))
                     # 8 calcolo la cosine-similarity tra i due embeddign, ricevendo un altra loss B
 
                     # hidden_states.shape torch.Size([1, 128, 768])
                     # projection   .shape torch.Size([1, 128, 512])
                     # image_encoded.shape torch.Size([1, 512])
-                    loss_clip = 1 - F.cosine_similarity(image_encoded, projection)
+                    loss_clip = 1 -  F.cosine_similarity(image_encoded, projection)
 
                     # 9 somme le due loss (A + B)
                     total_loss = loss_unet + loss_clip
                     if (math.isfinite(total_loss.item()) == False):
                         exit(1)
 
-                    print(str(total_loss.item()) + " Step: " + str(step))
+                    del noise, eeg, image, image_for_encode, timesteps, model_pred
 
-                    accelerator.backward(total_loss)
+                    accelerator.backward(total_loss.to("cuda"))
+
+                    del total_loss, projection
+
                     optimizer.step()
                     optimizer.zero_grad()
+                    print(str(total_loss.item()) + " Step: " + str(step))
             current_dateTime = datetime.datetime.now()
             print("DataFine: " + str(current_dateTime))
             if (epoch % 20 == 0 or epoch == 10 or epoch == 50):
                 save_model(unet, encoder, vae, clip_model, projector1,
                            config, config.output_path, epoch)
-
     except KeyboardInterrupt:
         print("Training interrupted. Saving model...")
         save_model(unet, encoder, vae, clip_model, projector1,
@@ -182,32 +189,18 @@ def main(config):
         exit(0)
 
 
-class ProjectionLayer(nn.Module):
+class ProjectionLayerH(nn.Module):
     def __init__(self, input_size, output_size):
-        super(ProjectionLayer, self).__init__()
-        self.l1 = nn.Linear(768, 384)
+        super(ProjectionLayerH, self).__init__()
         self.projection = nn.Linear(input_size, output_size)
 
     def forward(self, x):
-        x=self.l1(x)
         # Reshape the input tensor to have a single batch dimension
-        x = self.projection(x.flatten())
+        x = x.view(1, -1)
         # Apply the linear projection
-        
-        return torch.reshape(x,(1,768))
-class ProjectionLayerEmbedding(nn.Module):
-    def __init__(self, input_size, output_size):
-        super(ProjectionLayerEmbedding, self).__init__()
-        self.l1 = nn.Linear(1024, 16)
-        self.projection = nn.Linear(input_size, output_size)
+        x = self.projection(x)
+        return x
 
-    def forward(self, x):
-        x= self.l3(self.l2(self.l1(x)))
-        # Reshape the input tensor to have a single batch dimension
-        x = self.projection(x.flatten())
-        # Apply the linear projection
-        
-        return torch.reshape(x,(77,768))
 
 def save_model(unet, encoder, vae, clip_model, projector1, config, output_path, epoch=None):
     torch.save(
@@ -307,7 +300,8 @@ if __name__ == "__main__":
     config = update_config(args, config)
 
     if config.checkpoint_path is not None:
-        model_meta = torch.load(config.checkpoint_path, map_location="cpu")
+        model_meta = torch.load(
+            config.checkpoint_path, map_location="cuda" if torch.cuda.is_available() else "cpu")
         ckp = config.checkpoint_path
         config = model_meta["config"]
         config.checkpoint_path = ckp
