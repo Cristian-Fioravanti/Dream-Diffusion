@@ -25,8 +25,8 @@ class Config_MBM_EEG:
         # Model Parameters
         self.mask_ratio = 0.1
         self.patch_size = 4  #  1
-        self.embed_dim = 1024  # 256 # has to be a multiple of num_heads
-        self.decoder_embed_dim = 512  # 128
+        self.embed_dim = 256  #1024 # 256 # has to be a multiple of num_heads
+        self.decoder_embed_dim = 128 #512 # 128
         self.depth = 24
         self.num_heads = 16
         self.decoder_num_heads = 16
@@ -50,7 +50,7 @@ class Config_MBM_EEG:
 
         # distributed training
         self.local_rank = 0
-        self.load_all_dataset = False
+        self.load_all_dataset = True
         self.load_one_dataset = False
 
     # class Config_EEG_finetune(Config_MBM_finetune):

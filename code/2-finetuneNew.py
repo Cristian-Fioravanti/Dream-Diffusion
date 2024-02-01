@@ -157,7 +157,8 @@ def main(config):
                     optimizer.zero_grad()
             current_dateTime = datetime.datetime.now()
             print("DataFine: "+ str(current_dateTime))
-            save_model(unet, encoder, vae, clip_model, projector1, config, config.output_path, epoch)     
+            if(epoch % 5 == 0):
+                save_model(unet, encoder, vae, clip_model, projector1, config, config.output_path, epoch)     
 
     except KeyboardInterrupt:
         print("Training interrupted. Saving model...")

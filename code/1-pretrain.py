@@ -73,6 +73,7 @@ def main(config):
     for ep in range(config.num_epoch):
         # if torch.cuda.device_count() > 1:
         #     sampler.set_epoch(ep)  # to shuffle the data at every epoch
+        print(f"Currently on Epoch {ep} ...")
         cor = train_one_epoch(
             model,
             dataloader_eeg,
