@@ -25,11 +25,11 @@ class Config_MBM_EEG:
         # Model Parameters
         self.mask_ratio = 0.1
         self.patch_size = 4  #  1
-        self.embed_dim = 256  #1024 # 256 # has to be a multiple of num_heads
-        self.decoder_embed_dim = 128 #512 # 128
+        self.embed_dim = 32  #1024 # 256 # has to be a multiple of num_heads
+        self.decoder_embed_dim = 16 #512 # 128
         self.depth = 24
-        self.num_heads = 16
-        self.decoder_num_heads = 16
+        self.num_heads = 8
+        self.decoder_num_heads = 8
         self.mlp_ratio = 1.0
 
         # Project setting
@@ -112,7 +112,7 @@ class Config_Generative_Model:
         # self.splits_path = os.path.join(self.root_path, 'datasets/block_splits_by_image_all.pth')
         self.roi = "VC"
         self.patch_size = 4  # 16
-        self.embed_dim = 1024
+        self.embed_dim = 32 #1024
         self.depth = 24
         self.num_heads = 16
         self.mlp_ratio = 1.0

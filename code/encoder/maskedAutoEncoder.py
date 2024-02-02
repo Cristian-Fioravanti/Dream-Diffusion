@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
 import utils as ut
-
+from timm.models.vision_transformer import Block
 """
 I parametri: time_len, patch_size, in_chans, e embed_dim 
 specificano le dimensioni del problema e del modello. In particolare, time_len rappresenta la lunghezza della sequenza temporale, patch_size specifica la dimensione delle "patch" (o segmenti) della sequenza, in_chans è il numero di canali di input, e embed_dim è la dimensione dell'embedding per ogni patch.
@@ -34,47 +34,47 @@ class PatchEmbed1D(nn.Module):
         return x
 
 
-class CustomBlock(nn.Module):
-    def __init__(
-        self,
-        dim: int,
-        num_heads: int,
-        mlp_ratio: float = 4.,
-        dropout: float = 0.1,
-    ) -> None:
-        super().__init__()
+# class CustomBlock(nn.Module):
+#     def __init__(
+#         self,
+#         dim: int,
+#         num_heads: int,
+#         mlp_ratio: float = 4.,
+#         dropout: float = 0.1,
+#     ) -> None:
+#         super().__init__()
 
-        # Self-attention layer
-        self.self_attn = nn.MultiheadAttention(dim, num_heads, dropout=dropout)
+#         # Self-attention layer
+#         self.self_attn = nn.MultiheadAttention(dim, num_heads, dropout=dropout)
 
-        # Feedforward layer
-        self.feedforward = nn.Sequential(
-            nn.Linear(dim, int(dim * mlp_ratio)),
-            nn.ReLU(),
-            nn.Linear(int(dim * mlp_ratio), dim),
-            nn.Dropout(dropout),
-        )
+#         # Feedforward layer
+#         self.feedforward = nn.Sequential(
+#             nn.Linear(dim, int(dim * mlp_ratio)),
+#             nn.ReLU(),
+#             nn.Linear(int(dim * mlp_ratio), dim),
+#             nn.Dropout(dropout),
+#         )
 
-        # Layer normalization
-        self.norm1 = nn.LayerNorm(dim)
-        self.norm2 = nn.LayerNorm(dim)
+#         # Layer normalization
+#         self.norm1 = nn.LayerNorm(dim)
+#         self.norm2 = nn.LayerNorm(dim)
 
-        # Dropout
-        self.dropout = nn.Dropout(dropout)
+#         # Dropout
+#         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Self-attention and layer normalization
-        # ogni elemento della sequenza viene utilizzato per calcolare i pesi rispetto a tutti gli altri elementi nella stessa sequenza
-        attn_output, _ = self.self_attn(x, x, x)
-        x = x + self.dropout(attn_output)
-        x = self.norm1(x)
+#     def forward(self, x: torch.Tensor) -> torch.Tensor:
+#         # Self-attention and layer normalization
+#         # ogni elemento della sequenza viene utilizzato per calcolare i pesi rispetto a tutti gli altri elementi nella stessa sequenza
+#         attn_output, _ = self.self_attn(x, x, x)
+#         x = x + self.dropout(attn_output)
+#         x = self.norm1(x)
 
-        # Feedforward and layer normalization
-        ff_output = self.feedforward(x)
-        x = x + self.dropout(ff_output)
-        x = self.norm2(x)
+#         # Feedforward and layer normalization
+#         ff_output = self.feedforward(x)
+#         x = x + self.dropout(ff_output)
+#         x = self.norm2(x)
 
-        return x
+#         return x
 
 
 class MaskedAutoEncoderEEG(nn.Module):
@@ -89,6 +89,7 @@ class MaskedAutoEncoderEEG(nn.Module):
         decoder_embed_dim=512,
         decoder_depth=8,
         decoder_num_heads=16,
+        mlp_ratio=1.0,
         norm_layer=nn.LayerNorm,
         focus_range=None,
         focus_rate=None,
@@ -111,10 +112,7 @@ class MaskedAutoEncoderEEG(nn.Module):
 
         self.blocks = nn.ModuleList(
             [
-                CustomBlock(
-                    embed_dim,
-                    num_heads
-                )
+                 Block(embed_dim, num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer)
                 for i in range(depth)
             ]
         )
@@ -134,12 +132,8 @@ class MaskedAutoEncoderEEG(nn.Module):
 
         self.decoder_blocks = nn.ModuleList(
             [
-                CustomBlock(
-                    decoder_embed_dim,
-                    decoder_num_heads
-
-                )
-                for i in range(decoder_depth)
+               Block(decoder_embed_dim, decoder_num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer)
+               for i in range(decoder_depth)
             ]
         )
 
