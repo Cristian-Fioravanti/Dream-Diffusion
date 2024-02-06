@@ -79,20 +79,20 @@ def main(config):
         project_config=accelerator_project_config,
     )
     # Carica il modello dalla cartella specificata
-    folder_path = "../dreamdiffusion/exps/results/generation/25-01-2024-19-58-44"
-    model_name = "checkpoint.pth"
+    folder_path = "../dreamdiffusion/exps/results/generation/"
+    model_name = "checkpoint_epoch_0.pth"
     model_path = Path(folder_path) / model_name
     generative_model = torch.load(model_path)
 
     #Carico Encoder
     encoder = eegEncoder(time_len=data_len_eeg, patch_size=metafile_config.patch_size, embed_dim=metafile_config.embed_dim,
-                        depth=metafile_config.depth, num_heads=metafile_config.num_heads)
+                        depth=metafile_config.depth, num_heads=metafile_config.num_heads,mlp_ratio=metafile_config.mlp_ratio)
    
-    scheduler = DDPMScheduler.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="scheduler")
-    unet = UNet2DConditionModel.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="unet")
-    vae = AutoencoderKL.from_pretrained("CompVis/stable-diffusion-v1-4", subfolder="vae")
-    clip_model, preprocess = CLIP.load(name="ViT-B/32", device="cpu")    
-    projector1 = nn.Linear(1024, 768)
+    scheduler = DDPMScheduler.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="scheduler")
+    unet = UNet2DConditionModel.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="unet")
+    vae = AutoencoderKL.from_pretrained("runwayml/stable-diffusion-v1-5", subfolder="vae")
+    clip_model, preprocess = CLIP.load(name="ViT-L/14", device="cpu")    
+    projector1 = ProjectionLayerEmbedding(128*metafile_config.embed_dim, 59136)
 
     unet.load_state_dict(generative_model['unet_state_dict'])
     encoder.load_state_dict(generative_model['egg_encoder_state_dict'])
@@ -117,7 +117,7 @@ def main(config):
         scheduler.set_timesteps(timesteps)
         for t in tqdm(scheduler.timesteps):
             with torch.no_grad():
-                noisy_residual = unet(input, t, hidden_states, return_dict=False)[0]
+                noisy_residual = unet(input, t, hidden_states.unsqueeze(0), return_dict=False)[0]
                 prev_noisy_sample = scheduler.step(noisy_residual, t, input).prev_sample
                 input = prev_noisy_sample
 
@@ -136,17 +136,18 @@ def main(config):
 
                 
                 
-class ProjectionLayerH(nn.Module):
+class ProjectionLayerEmbedding(nn.Module):
     def __init__(self, input_size, output_size):
-        super(ProjectionLayerH, self).__init__()
+        super(ProjectionLayerEmbedding, self).__init__()
+      
         self.projection = nn.Linear(input_size, output_size)
 
     def forward(self, x):
         # Reshape the input tensor to have a single batch dimension
-        x = x.view(1, -1)
+        x = self.projection(x.flatten())
         # Apply the linear projection
-        x = self.projection(x)
-        return x
+
+        return torch.reshape(x,(77,768))
 
     
 def prepareOutputPath(config):

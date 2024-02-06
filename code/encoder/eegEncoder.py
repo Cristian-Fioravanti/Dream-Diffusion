@@ -2,12 +2,12 @@ import torch
 import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
-from encoder.maskedAutoEncoder import CustomBlock, PatchEmbed1D
+from encoder.maskedAutoEncoder import  PatchEmbed1D
 import utils as ut
-
+from timm.models.vision_transformer import Block
 class eegEncoder(nn.Module):
     def __init__(self, time_len=512, patch_size=4, embed_dim=1024, in_chans=128,
-                 depth=24, num_heads=16, norm_layer=nn.LayerNorm):
+                 depth=24, num_heads=16, norm_layer=nn.LayerNorm, mlp_ratio=1.0):
         super().__init__()
         self.patch_embed = PatchEmbed1D(
             time_len, patch_size, in_chans, embed_dim)
@@ -24,10 +24,7 @@ class eegEncoder(nn.Module):
 
         self.blocks = nn.ModuleList(
             [
-                CustomBlock(
-                    embed_dim,
-                    num_heads
-                )
+                Block(embed_dim, num_heads, mlp_ratio, qkv_bias=True, norm_layer=norm_layer)
                 for i in range(depth)
             ]
         )

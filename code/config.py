@@ -114,7 +114,7 @@ class Config_Generative_Model:
         self.patch_size = 4  # 16
         self.embed_dim = 32 #1024
         self.depth = 24
-        self.num_heads = 16
+        self.num_heads = 8
         self.mlp_ratio = 1.0
         self.Config_MBM_EEG = Config_MBM_EEG()
         self.pretrain_gm_path = os.path.join(self.root_path, "pretrains")
