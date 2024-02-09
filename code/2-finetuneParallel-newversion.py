@@ -15,6 +15,7 @@ from encoder.eegEncoder import eegEncoder
 from config import Config_Generative_Model, Config_MBM_EEG
 from dataset import create_EEG_dataset
 from diffusers import AutoencoderKL, DDPMScheduler, LMSDiscreteScheduler, StableDiffusionPipeline, UNet2DConditionModel
+from diffusers import PNDMScheduler
 import argparse
 import utils as ut
 import clip as CLIP
@@ -28,8 +29,9 @@ def main(config):
     img_transform_train = transforms.Compose([
         ut.normalize,
         transforms.Resize((512, 512)),
-        transforms.RandomCrop(size=(64, 64)),
+        transforms.RandomCrop(size=(512, 512)),
         transforms.Normalize([0.5], [0.5]),
+        # transforms.Resize((512, 512)),
         ut.channel_last,
     ])
 
@@ -60,7 +62,7 @@ def main(config):
     vae = AutoencoderKL.from_pretrained(
        "runwayml/stable-diffusion-v1-5", subfolder="vae")
 
-    scheduler = DDPMScheduler.from_pretrained(
+    scheduler = PNDMScheduler.from_pretrained(
        "runwayml/stable-diffusion-v1-5", subfolder="scheduler")
     clip_model, _ = CLIP.load(name="ViT-L/14", device=device)
     projector1 = ProjectionLayerEmbedding(128*metafile_config.embed_dim, 59136, device)
