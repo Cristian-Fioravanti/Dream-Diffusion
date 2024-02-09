@@ -51,6 +51,7 @@ def main(config):
         depth=config.depth,
         num_heads=config.num_heads,
         decoder_num_heads=config.decoder_num_heads,
+        mlp_ratio=config.mlp_ratio,
         focus_range=config.focus_range,
         focus_rate=config.focus_rate,
         img_recon_weight=config.img_recon_weight,
@@ -276,10 +277,11 @@ def train_one_epoch(
     # abilitando la modalità di autocasting automatico per eseguire operazioni in precisione mista durante il forward e il backward pass del modello
     # with torch.cuda.amp.autocast(enabled=True):
     #     # esegue il forward del modello  
-    loss, pred, _ = model(samples, mask_ratio=config.mask_ratio)  
+    with torch.autocast(device_type="cpu"):
+       loss, pred, _ = model(samples, mask_ratio=config.mask_ratio)  
     
     loss_value = loss.item()
-
+    
     if not math.isfinite(loss_value):
         print(f"Loss is not finite: {loss_value}, stopping training at epoch {epoch}")
         sys.exit(1)
