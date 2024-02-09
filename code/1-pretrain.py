@@ -289,6 +289,7 @@ def train_one_epoch(
     # esegue __call__ di NativeScalerWithGradNormCount e modifica i gradienti
     # loss_scaler(loss, optimizer, parameters=model.parameters(), clip_grad=config.clip_grad) 
     # cal the cor
+    print("Loss: "+str(loss_value))
     loss.backward(create_graph=False)   
     optimizer.step()
     
