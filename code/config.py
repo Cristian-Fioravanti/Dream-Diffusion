@@ -122,7 +122,6 @@ class Config_Generative_Model:
         self.dataset = "EEG"
         self.pretrain_mbm_path = '../dreamdiffusion/pretrains/eeg_pretrain/checkpoint.pth' # None cri 
 
-
         self.img_size = 512
 
         np.random.seed(self.seed)

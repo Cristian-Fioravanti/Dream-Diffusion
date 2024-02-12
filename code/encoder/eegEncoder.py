@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from encoder.maskedAutoEncoder import  PatchEmbed1D
 import utils as ut
 from timm.models.vision_transformer import Block
+
 class eegEncoder(nn.Module):
     def __init__(self, time_len=512, patch_size=4, embed_dim=1024, in_chans=128,
                  depth=24, num_heads=16, norm_layer=nn.LayerNorm, mlp_ratio=1.0):

@@ -12,8 +12,6 @@ from transformers import CLIPTextModel
 import torch.nn.functional as F
 from einops import rearrange
 from encoder.eegEncoder import eegEncoder
-from config import Config_Generative_Model
-from encoder.eegEncoder import eegEncoder
 from config import Config_Generative_Model, Config_MBM_EEG
 from dataset import create_EEG_dataset
 from diffusers import AutoencoderKL, DDPMScheduler, LMSDiscreteScheduler, StableDiffusionPipeline, UNet2DConditionModel
@@ -55,7 +53,7 @@ def main(config):
     data_len_eeg = eeg_latents_dataset_train.data_len
 
     encoder = eegEncoder(time_len=data_len_eeg, patch_size=metafile_config.patch_size, embed_dim=metafile_config.embed_dim,
-                         depth=metafile_config.depth, num_heads=metafile_config.num_heads)
+                         depth=metafile_config.depth, num_heads=metafile_config.num_heads, mlp_ratio=metafile_config.mlp_ratio)
 
     encoder.load_checkpoint(pretrain_model['model'])
 
@@ -132,7 +130,8 @@ def main(config):
                     del eeg, image, timesteps
 
                     accelerator.backward(total_loss.to(device))
-                    print(str(total_loss.item()) + " Step: " + str(step))
+                    current_dateTime = datetime.datetime.now()
+                    print(str(total_loss.item()) + " Step: " + str(step) + " " + str(current_dateTime))
                     del total_loss, projection
                     gc.collect()
                     torch.cuda.empty_cache()
