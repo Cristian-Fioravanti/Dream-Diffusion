@@ -94,9 +94,9 @@ class eeg_pretrain_dataset(Dataset):
         return {"eeg": ret}
 
 
-def create_EEG_dataset(eeg_signals_path='../dreamdiffusion/datasets/eeg_5_95_std.pth',
-                       splits_path='../dreamdiffusion/datasets/block_splits_by_image_single.pth',
-                       # splits_path = '../dreamdiffusion/datasets/block_splits_by_image_all.pth',
+def create_EEG_dataset(eeg_signals_path='/datasets/eeg_5_95_std.pth',
+                       splits_path='/datasets/block_splits_by_image_single.pth',
+                       # splits_path = 'datasets/block_splits_by_image_all.pth',
                        image_transform=ut.identity, subject=0):
     # if subject == 0:
     # splits_path = '../dreamdiffusion/datasets/block_splits_by_image_all.pth'

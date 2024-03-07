@@ -22,8 +22,8 @@ import clip as CLIP
 import gc
 
 def main(config):
-    device = "cpu"
-    pretrain_model = torch.load('../dreamdiffusion/pretrains/eeg_pretrain/checkpoint.pth', map_location=device)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    pretrain_model = torch.load(config.pretrain_mbm_path, map_location=device)
     metafile_config = pretrain_model['config']
 
     img_transform_train = transforms.Compose([
@@ -141,7 +141,7 @@ def main(config):
 
             current_dateTime = datetime.datetime.now()
             print("DataFine: " + str(current_dateTime))
-            if epoch % 5 == 0:
+            if epoch % 4 == 0:
                 save_model(unet, encoder, vae, clip_model,
                         projector1, config, config.output_path, epoch)
     except KeyboardInterrupt:

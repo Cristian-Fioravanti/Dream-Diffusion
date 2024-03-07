@@ -32,7 +32,7 @@ def main(config):
 
     # create dataset and dataloader
     dataset_pretrain = eeg_pretrain_dataset(
-        path="../dreamdiffusion/datasets/eegdataset/eeg",
+        path="datasets/eegdataset/eeg",
     )
 
     dataloader_eeg = DataLoader(
