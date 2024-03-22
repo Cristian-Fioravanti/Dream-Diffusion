@@ -21,11 +21,39 @@ import utils as ut
 import clip as CLIP
 import gc
 
+class ProjectionLayer(nn.Module):
+    def __init__(self, input_size, output_size, device):
+        super(ProjectionLayer, self).__init__()
+        self.device = device
+        self.l1 =nn.Linear(768,384).to(device)
+        self.projection = nn.Linear(input_size, output_size).to(device)
+
+    def forward(self, x):
+        x = self.l1(x).to(self.device)
+        # Reshape the input tensor to have a single batch dimension
+        x = self.projection(x.flatten()).to(self.device)
+        # Apply the linear projection
+        return torch.reshape(x,(1,768))
+    
+class ProjectionLayerEmbedding(nn.Module):
+    def __init__(self, input_size, output_size, device):
+        super(ProjectionLayerEmbedding, self).__init__()
+        self.device = device
+        self.projection = nn.Linear(input_size, output_size).to(device)
+
+    def forward(self, x):
+        # Reshape the input tensor to have a single batch dimension
+        x = self.projection(x.flatten()).to(self.device)
+        # Apply the linear projection
+        return torch.reshape(x,(77,768))
+    
 def main(config):
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    # Pretrianed model loading
     pretrain_model = torch.load(config.pretrain_mbm_path, map_location=device)
     metafile_config = pretrain_model['config']
 
+    # Training image transformations
     img_transform_train = transforms.Compose([
         ut.normalize,
         transforms.Resize((512, 512)),
@@ -35,23 +63,26 @@ def main(config):
         ut.channel_last,
     ])
 
+    # Testing image transformations
     img_transform_test = transforms.Compose([
         ut.normalize,
         transforms.Resize((512, 512)),
         ut.channel_last
     ])
 
+    # Crop image transformation for CLIP model
     crop_transform = transforms.CenterCrop((224, 224))
 
-    eeg_latents_dataset_train, eeg_latents_dataset_test = create_EEG_dataset(
+    # Definition of train and test datasets
+    eeg_latents_dataset_train, _ = create_EEG_dataset(
         eeg_signals_path=config.eeg_signals_path,
         splits_path=config.splits_path,
         image_transform=[img_transform_train, img_transform_test],
         subject=config.subject,
     )
-
     data_len_eeg = eeg_latents_dataset_train.data_len
 
+    # Definition of the models useful for fine-tuning
     encoder = eegEncoder(time_len=data_len_eeg, patch_size=metafile_config.patch_size, embed_dim=metafile_config.embed_dim,
                          depth=metafile_config.depth, num_heads=metafile_config.num_heads, mlp_ratio=metafile_config.mlp_ratio)
 
@@ -72,6 +103,7 @@ def main(config):
     clip_model.required_grad = False
     projection_layer.required_grad = False
 
+    # Accelerator
     accelerator = Accelerator()
     unet, encoder, vae, scheduler, projector1, clip_model, crop_transform = accelerator.prepare(
         unet, encoder, vae, scheduler, projector1, clip_model, crop_transform)
@@ -80,10 +112,10 @@ def main(config):
                                   list(encoder.parameters()) +
                                   list(projector1.parameters()), lr=config.lr)
     try:
-        # Training loop
+        # Fine-tuning loop
         for epoch in range(config.num_epoch):
             current_dateTime = datetime.datetime.now()
-            print("DataInizio: " + str(current_dateTime))
+            print("Starting Date: " + str(current_dateTime))
             print(f"Epoch: {epoch}")
 
             for step, batch in enumerate(eeg_latents_dataset_train):
@@ -91,37 +123,47 @@ def main(config):
                 image = batch["image"].to(device)
 
                 with accelerator.accumulate(unet, encoder, projector1):
+                    # EEG embedding are retrieved using encoder
                     embeddings = encoder(eeg).to(device)
+                    # Embeddings are projected 
                     hidden_states = projector1(embeddings).to(device)
                     del embeddings
+                    # Image is prepared for encoding
                     image_for_encode = change_shape_for_encode(
                         image).to(device)
-
+                    
+                    # The VAE model is used to encode the image into latent data
                     latents = vae.encode(image_for_encode).latent_dist.sample().to(device)
                     latents = latents * vae.config.scaling_factor
 
+                    # A random noise is added to latents
                     noise = torch.randn_like(latents).to(device)
                     timesteps = torch.randint(0, 1000, (1,),
                                             device=device).long()
-
                     noisy_latents = scheduler.add_noise(
                         latents, noise, timesteps).to(device)
                     del latents
 
+                    # An image is generated using UNet model
                     model_pred = unet(noisy_latents, timesteps, hidden_states.unsqueeze(0), return_dict=False)[
                         0].to(device)
+                    # Loss function for UNet = Mean Square Error
                     loss_unet = F.mse_loss(
                         model_pred, noise, reduction="mean").to(device)
-
                     del model_pred, noise
+
+                    # Image preparation for CLIP model
                     image_cropped = crop_transform(image_for_encode).to(device)
                     del image_for_encode
+                    # Encoding of the image using CLIP model
                     image_encoded = clip_model.encode_image(
                         image_cropped).to(device)
 
+                    # Clip loss function = 1 - cosine similarity between encoded image from CLIP and hidden states
                     projection = projection_layer(hidden_states).to(device)
                     loss_clip = 1 - F.cosine_similarity(image_encoded, projection).to(device)
 
+                    # Total loss of the model is the sum of UNet's loss and CLIP's loss
                     total_loss = loss_unet + loss_clip
                     del loss_unet, loss_clip
                     if not math.isfinite(total_loss.item()):
@@ -129,6 +171,7 @@ def main(config):
 
                     del eeg, image, timesteps
 
+                    # Backpropagation
                     accelerator.backward(total_loss.to(device))
                     current_dateTime = datetime.datetime.now()
                     print(str(total_loss.item()) + " Step: " + str(step) + " " + str(current_dateTime))
@@ -140,7 +183,7 @@ def main(config):
                     optimizer.zero_grad()
 
             current_dateTime = datetime.datetime.now()
-            print("DataFine: " + str(current_dateTime))
+            print("End Date: " + str(current_dateTime))
             if epoch % 4 == 0:
                 save_model(unet, encoder, vae, clip_model,
                         projector1, config, config.output_path, epoch)
@@ -148,6 +191,9 @@ def main(config):
         print("Training interrupted. Saving model...")
         save_model(unet, encoder, vae, clip_model, projector1, config, config.output_path, epoch=None)
         exit(0)
+
+def change_shape_for_encode(image):
+    return rearrange(image, "h w c-> c h w").unsqueeze(0).to(dtype=torch.float32)
 
 def save_model(unet, encoder, vae, clip_model, projector1, config, output_path, epoch=None):
     torch.save(
@@ -163,34 +209,6 @@ def save_model(unet, encoder, vae, clip_model, projector1, config, output_path, 
         os.path.join(output_path, f'checkpoint_epoch_{epoch}.pth') if epoch is not None else os.path.join(
             output_path, 'manual_checkpoint.pth')
     )
-
-class ProjectionLayer(nn.Module):
-    def __init__(self, input_size, output_size, device):
-        super(ProjectionLayer, self).__init__()
-        self.device = device
-        self.l1 =nn.Linear(768,384).to(device)
-        self.projection = nn.Linear(input_size, output_size).to(device)
-
-    def forward(self, x):
-        x = self.l1(x).to(self.device)
-        # Reshape the input tensor to have a single batch dimension
-        x = self.projection(x.flatten()).to(self.device)
-        # Apply the linear projection
-
-        return torch.reshape(x,(1,768))
-    
-class ProjectionLayerEmbedding(nn.Module):
-    def __init__(self, input_size, output_size, device):
-        super(ProjectionLayerEmbedding, self).__init__()
-        self.device = device
-        self.projection = nn.Linear(input_size, output_size).to(device)
-
-    def forward(self, x):
-        # Reshape the input tensor to have a single batch dimension
-        x = self.projection(x.flatten()).to(self.device)
-        # Apply the linear projection
-
-        return torch.reshape(x,(77,768))
 
 def prepareOutputPath(config):
     output_path = os.path.join(
@@ -249,11 +267,6 @@ def get_args_parser():
     parser.add_argument("--eval_avg", type=bool)
 
     return parser
-
-
-def change_shape_for_encode(image):
-    return rearrange(image, "h w c-> c h w").unsqueeze(0).to(dtype=torch.float32)
-
 
 if __name__ == "__main__":
     args = get_args_parser()

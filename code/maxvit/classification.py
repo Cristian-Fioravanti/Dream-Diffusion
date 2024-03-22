@@ -10,34 +10,24 @@ CKPTS_DIRS = {
     'MaxViTTiny_i1k_224': 'ckpts/maxvittiny/i1k/224',
     'MaxViTTiny_i1k_384': 'ckpts/maxvittiny/i1k/384',
     'MaxViTTiny_i1k_512': 'ckpts/maxvittiny/i1k/512',
-    'MaxViTSmall_i1k_224': 'gs://gresearch/maxvit/ckpts/maxvitsmall/i1k/224',
-    'MaxViTSmall_i1k_384': 'gs://gresearch/maxvit/ckpts/maxvitsmall/i1k/384',
-    'MaxViTSmall_i1k_512': 'gs://gresearch/maxvit/ckpts/maxvitsmall/i1k/512',
+    'MaxViTSmall_i1k_224': 'ckpts/maxvitsmall/i1k/224',
+    'MaxViTSmall_i1k_384': 'ckpts/maxvitsmall/i1k/384',
+    'MaxViTSmall_i1k_512': 'ckpts/maxvitsmall/i1k/512',
     'MaxViTBase_i1k_224': 'ckpts/maxvitbase/i1k/224',
     'MaxViTBase_i1k_384': 'ckpts/maxvitbase/i1k/384',
     'MaxViTBase_i1k_512': 'ckpts/maxvitbase/i1k/512',
-    'MaxViTBase_i21k_i1k_224': None,
-    'MaxViTBase_i21k_384': 'ckpts/maxvitbase/i21k/384',
-    'MaxViTBase_i21k_512': 'ckpts/maxvitbase/i21k512',
-    'MaxViTLarge_i1k_224': 'gs://gresearch/maxvit/ckpts/maxvitlarge/i1k/224',
-    'MaxViTLarge_i1k_384': 'gs://gresearch/maxvit/ckpts/maxvitlarge/i1k/384',
-    'MaxViTLarge_i1k_512': 'gs://gresearch/maxvit/ckpts/maxvitlarge/i1k/512',
-    'MaxViTLarge_i21k_i1k_224': None,
-    'MaxViTLarge_i21k_i1k_384': 'gs://gresearch/maxvit/ckpts/maxvitlarge/i21k_i1k/384',
-    'MaxViTLarge_i21k_i1k_512': 'gs://gresearch/maxvit/ckpts/maxvitlarge/i21k_i1k/512',
-    'MaxViTXLarge_i21k_i1k_224': None,
-    'MaxViTXLarge_i21k_i1k_384': 'gs://gresearch/maxvit/ckpts/maxvitxlarge/i21k_i1k/384',
-    'MaxViTXLarge_i21k_i1k_512': 'gs://gresearch/maxvit/ckpts/maxvitxlarge/i21k_i1k/512',
+    'MaxViTLarge_i1k_224': 'ckpts/maxvitlarge/i1k/224',
+    'MaxViTLarge_i1k_384': 'ckpts/maxvitlarge/i1k/384',
+    'MaxViTLarge_i1k_512': 'ckpts/maxvitlarge/i1k/512',
 }
 
 DATASET_MAP = {
-    'ImageNet-1K': 'i1k', 
-    'ImageNet-21K': 'i21k',
+    'ImageNet-1K': 'i1k'
 }
 
 
-MODEL_NAME = "MaxViTTiny" #@param ["MaxViTTiny", "MaxViTSmall", "MaxViTBase", "MaxViTLarge"] {type:"string"}
-TRAIN_SET = "ImageNet-1K" #@param ["ImageNet-1K", "ImageNet-21K"] {type:"string"}
+MODEL_NAME = "MaxViTSmall" #@param ["MaxViTTiny", "MaxViTSmall", "MaxViTBase", "MaxViTLarge"] {type:"string"}
+TRAIN_SET = "ImageNet-1K"
 TRAIN_IMAGE_SIZE = "512" #@param [224, 384, 512] {type:"string"}
 
 CKPT_DIR = CKPTS_DIRS[f'{MODEL_NAME}_{DATASET_MAP[TRAIN_SET]}_{TRAIN_IMAGE_SIZE}']
@@ -47,11 +37,11 @@ import os
 
 #@markdown ### Enter a file path:
 # file_path = "https://upload.wikimedia.org/wikipedia/commons/f/fe/Giant_Panda_in_Beijing_Zoo_1.JPG" #@param {type:"string"}
-dir_path = "D:/NN/OurDreamDiffusion/code/maxvit/photos"
+dir_path = "photos"
 INFER_IMAGE_SIZE = "1024" #@param [224, 384, 448, 512, 672, 768, 896, 1024] {type:"string"}
 
 # Download label map file and image
-labels_map_file = 'D:/NN/OurDreamDiffusion/code/maxvit/labels_map.json'
+labels_map_file = 'labels_map.json'
 set_path = "testset" #@param ["testset", "trainset"] {type:"string"}
 dir_path = dir_path + "/" + set_path
 test_set = dir_path + "/test"

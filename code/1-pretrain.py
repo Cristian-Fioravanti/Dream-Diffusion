@@ -61,19 +61,17 @@ def main(config):
 
     param_groups = optim_factory.add_weight_decay(
         model, config.weight_decay
-    )  # utilizzato per gestire la decrescita del peso durante l'ottimizzazione.
+    )  # used to manage weight decay during optimization.
 
     optimizer = torch.optim.AdamW(
         param_groups, lr=config.lr, betas=(0.9, 0.95)
-    )  # istanziato l'ottimizzatore AdamW, lr=learning rate
+    )  # AdamW optimizer instantiated
 
-    cor_list = []  # lista per tracciare la correlazione durante l'addestramento
+    cor_list = []  # list to track correlation during training
     start_time = time.time()
     print("Start Training the EEG MAE ... ...")
 
     for ep in range(config.num_epoch):
-        # if torch.cuda.device_count() > 1:
-        #     sampler.set_epoch(ep)  # to shuffle the data at every epoch
         print(f"Currently on Epoch {ep} ...")
         cor = train_one_epoch(
             model,
@@ -89,7 +87,6 @@ def main(config):
             ep % 20 == 0 or ep + 1 == config.num_epoch
         ) and config.local_rank == 0:  # and ep != 0
             # save models
-            # if True:
             save_model(
                 config,
                 ep,
@@ -112,11 +109,7 @@ def main(config):
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print("Training time {}".format(total_time_str))
-    # if logger is not None:
-    #     logger.log("max cor", np.max(cor_list), step=config.num_epoch - 1)
-    #     logger.finish()
     return
-
 
 @torch.no_grad()
 def plot_recon_figures(
@@ -196,7 +189,6 @@ def prepareOutputPath(config):
     )
 
     setattr(config, "output_path", output_path)
-    # config.output_path = output_path
 
     if config.local_rank == 0:
         os.makedirs(output_path, exist_ok=True)
@@ -258,25 +250,24 @@ def train_one_epoch(
     config=None,
     model_without_ddp=None
 ):
-    # Imposta il modello in modalità di addestramento
+    # Set the model to training mode
     model.train(True)
-    optimizer.zero_grad()  # Azzera i gradienti dell'ottimizzatore
-    total_loss = []  # Accumulatore per le perdite
-    total_cor = []  # Accumulatore per le correlazioni
+    optimizer.zero_grad()  # Resets the optimizer gradients
+    total_loss = []  # Loss accumulator
+    total_cor = []  # Correlations accumulator
 
-    # Iterazione attraverso il dataloader
+    # Iterating through the dataloader
     data_dcit = next(iter(data_loader), None)
-    # Regolazione del tasso di apprendimento in base al numero di iterazioni
+    # Adjusting the learning rate based on the number of iterations
     ut.adjust_learning_rate(optimizer, epoch, config)
 
-    samples = data_dcit["eeg"]  # Campioni di EEG dal dataloader torch.Size([1, 128, 512])
-    samples = samples.to(device)  # Sposta i campioni sul device
+    samples = data_dcit["eeg"]  # Samples of EEG from dataloader torch.Size([1, 128, 512])
+    samples = samples.to(device)  # Move samples to device
 
-    optimizer.zero_grad()  # Azzera i gradienti dell'ottimizzatore
+    optimizer.zero_grad()  # Resets the optimizer gradients
 
-    # abilitando la modalità di autocasting automatico per eseguire operazioni in precisione mista durante il forward e il backward pass del modello
-    # with torch.cuda.amp.autocast(enabled=True):
-    #     # esegue il forward del modello  
+    # enabling automatic autocasting mode to perform mixed precision operations during forward and backward pass of the model
+    # execute forward passof the model 
     with torch.autocast(device_type="cpu"):
        loss, pred, _ = model(samples, mask_ratio=config.mask_ratio)  
     
@@ -290,16 +281,17 @@ def train_one_epoch(
     # loss_scaler(loss, optimizer, parameters=model.parameters(), clip_grad=config.clip_grad) 
     # cal the cor
     print("Loss: "+str(loss_value))
+    # Backward operation
     loss.backward(create_graph=False)   
     optimizer.step()
     
     pred = pred.to("cpu").detach()
     samples = samples.to("cpu").detach()
   
-    # trasforma il tensore nell'immagine
+    # Transform tensor in image
     pred = model_without_ddp.unpatchify(pred)
   
-    # Viene calcolata la correlazione media tra le predizioni (pred) e i campioni di input (samples)
+    # The average correlation between the predictions (pred) and the input samples (samples) is calculated
     cor = torch.mean(
         torch.tensor(
             [
