@@ -50,7 +50,7 @@ files_jpg = os.listdir(test_set)
 numero_di_file = len(files_jpg)
 
 pred_dict = {}
-results_file_json = f"{dir_path}/results_{MODEL_NAME}_{DATASET_MAP[TRAIN_SET]}_{TRAIN_IMAGE_SIZE}_{INFER_IMAGE_SIZE}.json"
+results_file_json = f"results/results_{MODEL_NAME}_{DATASET_MAP[TRAIN_SET]}_{TRAIN_IMAGE_SIZE}_{INFER_IMAGE_SIZE}.json"
 if os.path.exists(results_file_json):
     with open(results_file_json, 'r') as f:
         pred_dict = json.load(f)
@@ -88,8 +88,6 @@ for file in files_jpg:
 end_time = time.time()
 execution_time = end_time - start_time
 print(f"Tempo di esecuzione TOTALE: {execution_time} secondi")
-
-# results_file_json = f"{dir_path}/results_{MODEL_NAME}_{DATASET_MAP[TRAIN_SET]}_{TRAIN_IMAGE_SIZE}_{INFER_IMAGE_SIZE}.json"
 
 top0_perc = 0
 perc = 0

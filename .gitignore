@@ -14,3 +14,7 @@ code/__pycache__/
 
 
 
+/code/maxvit/ckpts/**
+/code/maxvit/photos/**
+/code/maxvit/maxvit.egg-info
+/code/maxvit/dist

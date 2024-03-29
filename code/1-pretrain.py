@@ -18,7 +18,6 @@ from dataset import eeg_pretrain_dataset
 import utils as ut
 
 def main(config):
-
     config = prepareOutputPath(config)
 
     device = torch.device("cpu")
@@ -67,13 +66,12 @@ def main(config):
         param_groups, lr=config.lr, betas=(0.9, 0.95)
     )  # AdamW optimizer instantiated
 
-    cor_list = []  # list to track correlation during training
     start_time = time.time()
     print("Start Training the EEG MAE ... ...")
 
     for ep in range(config.num_epoch):
         print(f"Currently on Epoch {ep} ...")
-        cor = train_one_epoch(
+        train_one_epoch(
             model,
             dataloader_eeg,
             optimizer,
@@ -82,7 +80,6 @@ def main(config):
             config,
             model_without_ddp
         )
-        cor_list.append(cor)
         if (
             ep % 20 == 0 or ep + 1 == config.num_epoch
         ) and config.local_rank == 0:  # and ep != 0
@@ -305,20 +302,17 @@ def train_one_epoch(
     ).item()
     optimizer.zero_grad()
 
-    total_loss.append(loss_value)
     total_cor.append(cor)
-    if device == torch.device("cuda:0"):
-        lr = optimizer.param_groups[0]["lr"]
-        print(
-            "train_loss_step:",
-            np.mean(total_loss),
-            "lr:",
-            lr,
-            "cor",
-            np.mean(total_cor),
-        )
-
-    return np.mean(total_cor)
+    lr = optimizer.param_groups[0]["lr"]
+    print(
+        "train_loss_step:",
+        np.mean(total_loss),
+        "lr:",
+        lr,
+        "cor",
+        np.mean(total_cor),
+    )
+    return
 
 
 if __name__ == "__main__":
