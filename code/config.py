@@ -1,18 +1,9 @@
 import os
 import numpy as np
 
-# class Config_MAE_fMRI: # back compatibility
-#     pass
-# class Config_MBM_finetune: # back compatibility
-#     pass
-
-
-# class Config_MBM_EEG(Config_MAEfMRI):
 class Config_MBM_EEG:
-    # configs for fmri_pretrain.py
     def __init__(self):
         # --------------------------------------------
-        # MAE for fMRI
         # Training Parameters
         self.lr = 2.5e-4
         self.min_lr = 0.0
@@ -23,7 +14,7 @@ class Config_MBM_EEG:
         self.clip_grad = 0.8
 
         # Model Parameters
-        self.mask_ratio = 0.1
+        self.mask_ratio = 0.75
         self.patch_size = 4  #  1
         self.embed_dim = 64  #1024 # 256 # has to be a multiple of num_heads
         self.decoder_embed_dim = 32 #512 # 128
@@ -53,14 +44,10 @@ class Config_MBM_EEG:
         self.load_all_dataset = True
         self.load_one_dataset = False
 
-    # class Config_EEG_finetune(Config_MBM_finetune):
-
-
 class Config_EEG_finetune:
     def __init__(self):
         # Project setting
         self.root_path = ""
-        # self.root_path = '.'
         self.output_path = "exps/"
 
         self.eeg_signals_path = os.path.join(
@@ -82,7 +69,7 @@ class Config_EEG_finetune:
         self.weight_decay = 0.05
         self.num_epoch = 15
         self.batch_size = 16 if self.dataset == "GOD" else 4
-        self.mask_ratio = 0.5
+        self.mask_ratio = 0.75
         self.accum_iter = 1
         self.clip_grad = 0.8
         self.warmup_epochs = 2
@@ -120,7 +107,7 @@ class Config_Generative_Model:
         self.pretrain_gm_path = os.path.join(self.root_path, "pretrains")
 
         self.dataset = "EEG"
-        self.pretrain_mbm_path = 'pretrains/eeg_pretrain/checkpoint.pth' # None cri 
+        self.pretrain_mbm_path = 'pretrains/eeg_pretrain/checkpoint.pth'
 
         self.img_size = 512
 

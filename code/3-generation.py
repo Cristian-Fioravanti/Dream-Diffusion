@@ -93,7 +93,7 @@ def main(config):
     )
     # Finetuned model loading
     folder_path = "exps/results/generation/"
-    model_name = "checkpoint_epoch_64.pth"
+    model_name = "checkpoint_epoch.pth"
     model_path = Path(folder_path) / model_name
     generative_model = torch.load(model_path, map_location=device)
 
@@ -127,7 +127,7 @@ def main(config):
         image_real = Image.fromarray(
             ((image.cpu() / 2 + 0.5).clamp(0, 1) * 255).numpy().astype('uint8'))
         image_real_path = os.path.join(config.output_path,
-                                    f'testset/real/{step}.jpg')
+                                    f'real/{step}.jpg')
         image_real.save(image_real_path)
 
         # EEG embedding are retrieved using encoder
@@ -147,8 +147,8 @@ def main(config):
         del latents, image_for_encode
         
         # Definition of timesteps
-        # timesteps = torch.randint(0, 1000, (1,), device=latents.device)
-        timesteps = 199
+        timesteps = torch.randint(0, 1000, (1,), device=latents.device)
+        # timesteps = 199
         scheduler.set_timesteps(timesteps)
         for t in tqdm(scheduler.timesteps):
             with torch.no_grad():
@@ -169,51 +169,9 @@ def main(config):
         image_gen = Image.fromarray((image_gen * 255).round().astype("uint8"))
 
         image_gen_path = os.path.join(config.output_path,
-                                    f'testset/test/{step}.jpg')
+                                    f'test/{step}.jpg')
 
         image_gen.save(image_gen_path)
-
-    # for step, batch in enumerate(eeg_latents_dataset_train):
-    #     eeg = batch["eeg"].to(device)
-    #     image = batch["image"].to(device)
-
-    #     image_real = Image.fromarray(
-    #         ((image.cpu() / 2 + 0.5).clamp(0, 1) * 255).numpy().astype('uint8'))
-    #     image_real_path = os.path.join(config.output_path,
-    #                                    f'trainset/real/{step}.jpg')
-    #     image_real.save(image_real_path)
-
-    #     embeddings = encoder(eeg).to(device)
-    #     hidden_states = projector1(embeddings).to(device)
-    #     image_for_encode = change_shape_for_encode(image).to(device)
-    #     del embeddings, eeg, image
-        
-    #     latents = vae.encode(image_for_encode).latent_dist.sample().to(device)
-    #     latents = latents * vae.config.scaling_factor
-
-    #     input = torch.randn_like(latents).to(accelerator.device).to(device)
-    #     del latents, image_for_encode
-    #     # timesteps = torch.randint(0, 1000, (1,), device=latents.device)
-    #     timesteps = 199
-    #     scheduler.set_timesteps(timesteps)
-    #     for t in tqdm(scheduler.timesteps):
-    #         with torch.no_grad():
-    #             noisy_residual = unet(input, t, hidden_states.unsqueeze(0), return_dict=False)[0].to(device)
-    #             prev_noisy_sample = scheduler.step(noisy_residual, t, input).prev_sample
-    #             input = prev_noisy_sample
-    #     del timesteps, hidden_states, noisy_residual
-    #     input = 1 / 0.18215 * input
-    #     with torch.no_grad():
-    #         image_gen = vae.decode(input).sample
-
-    #     image_gen = (image_gen / 2 + 0.5).clamp(0, 1)
-    #     image_gen = image_gen.cpu().permute(0, 2, 3, 1).numpy()[0]
-    #     image_gen = Image.fromarray((image_gen * 255).round().astype("uint8"))
-
-    #     image_gen_path = os.path.join(config.output_path,
-    #                                   f'trainset/test/{step}.jpg')
-
-    #     image_gen.save(image_gen_path)
 
 def change_shape_for_encode(image):
     return rearrange(image, "h w c-> c h w").unsqueeze(0).to(dtype=torch.float32)
@@ -232,28 +190,19 @@ def prepareOutputPath(config):
     setattr(config, "output_path", output_path)
     # config.output_path = output_path
 
-    os.makedirs(os.path.join(output_path,'testset/real/'))
-    os.makedirs(os.path.join(output_path,'testset/test/'))
-    os.makedirs(os.path.join(output_path,'trainset/real/'))
-    os.makedirs(os.path.join(output_path,'trainset/test/'))
+    os.makedirs(os.path.join(output_path,'real/'))
+    os.makedirs(os.path.join(output_path,'test/'))
 
     return config
 
 
 def folder_init(config, output_path):
-    # wandb.init( project='dreamdiffusion',
-    #             group="stageB_dc-ldm",
-    #             anonymous="allow",
-    #             config=config,
-    #             reinit=True)
     create_readme(config, output_path)
-
 
 def create_readme(config, path):
     print(config.__dict__)
     with open(os.path.join(path, "README.md"), "w+") as f:
         print(config.__dict__, file=f)
-
 
 def update_config(args, config):
     for attr in config.__dict__:
@@ -261,7 +210,6 @@ def update_config(args, config):
             if getattr(args, attr) != None:
                 setattr(config, attr, getattr(args, attr))
     return config
-
 
 def get_args_parser():
     parser = argparse.ArgumentParser(
@@ -293,7 +241,6 @@ def get_args_parser():
     # parser.add_argument('--local_rank', type=int)
 
     return parser
-
 
 
 if __name__ == "__main__":

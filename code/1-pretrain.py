@@ -274,7 +274,6 @@ def train_one_epoch(
         print(f"Loss is not finite: {loss_value}, stopping training at epoch {epoch}")
         sys.exit(1)
 
-    # esegue __call__ di NativeScalerWithGradNormCount e modifica i gradienti
     # loss_scaler(loss, optimizer, parameters=model.parameters(), clip_grad=config.clip_grad) 
     # cal the cor
     print("Loss: "+str(loss_value))
