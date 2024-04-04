@@ -22,20 +22,6 @@ import torch.nn.functional as F
 import clip as CLIP
 from einops import rearrange
 from tqdm.auto import tqdm
-# 1 Caricare il modello pretrained V
-# 2 Prendere labeledEEG gli facciamo l'encoder per ricavare la noise
-# 3 aggiungiamo a questa noise una randomNoise
-# 4 passare tutto alla uNET per poi calcolarci la loss A
-
-# 5 prendo l'immagine dell'egg relativo, lo croppo
-# 6 uso l'encoder di clip per trovare l'embedding dell'immagine
-# 7 utilizzo una projection per poter confrontare i due embedding trovati
-# 8 calcolo la cosine-similarity tra i due embeddign, ricevendo un altra loss B
-
-# 10 loss.backward()
-# 11 optimizer.step()
-# 11 optimizer.zero_grad()
-
         
 class ProjectionLayerEmbedding(nn.Module):
     def __init__(self, input_size, output_size, device):
@@ -147,8 +133,7 @@ def main(config):
         del latents, image_for_encode
         
         # Definition of timesteps
-        timesteps = torch.randint(0, 1000, (1,), device=latents.device)
-        # timesteps = 199
+        timesteps = 999
         scheduler.set_timesteps(timesteps)
         for t in tqdm(scheduler.timesteps):
             with torch.no_grad():

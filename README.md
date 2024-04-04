@@ -13,8 +13,8 @@ Our implementation is composed by three different sections:
 3. Image generation: image are generated from test EEG data using the model.
 
 ## Datasets
-* A large amounts of [EEG data](https://studentiunict-my.sharepoint.com/personal/concetto_spampinato_unict_it/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fconcetto%5Fspampinato%5Funict%5Fit%2FDocuments%2Fsito%5FPeRCeiVe%2Fdatasets%2Feeg%5Fcvpr%5F2017&ga=1) used to pre-training in order to achieve an efficient Masked AutoEncoder.
-* A set of [EEG-image pairs](https://studentiunict-my.sharepoint.com/personal/concetto_spampinato_unict_it/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fconcetto%5Fspampinato%5Funict%5Fit%2FDocuments%2Fsito%5FPeRCeiVe%2Fdatasets%2Feeg%5Fcvpr%5F2017&ga=1) used to accurately align the EEG features with existing text embedding. These EEG are obtained from some subjects while they were shown 2000 images belonging to 40 different categories of objects from the ImageNet
+* A large amounts of [EEG data](https://tinyurl.com/eeg-visual-classification) used to pre-training in order to achieve an efficient Masked AutoEncoder.
+* A set of [EEG-image pairs](https://tinyurl.com/eeg-visual-classification) used to accurately align the EEG features with existing text embedding. These EEG are obtained from some subjects while they were shown 2000 images belonging to 40 different categories of objects from the ImageNet
 dataset.
 * A subset of [ImageNet](https://drive.google.com/file/d/1y7I9bG1zKYqBM94odcox_eQjnP9HGo9-/view?usp=drive_link) containing the images showed to subsets.
 
